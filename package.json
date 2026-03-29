@@ -1,0 +1,55 @@
+{
+  "name": "tiptap-table-plus-plus",
+  "version": "0.0.1",
+  "description": "Titap table extension based on tiptap-table-plus, with added support for table borders and styling.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "package.json"
+  ],
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc",
+    "watch": "tsc-watch --onSuccess \"echo 'Build completed'\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RomikMakavana/tiptap-table-plus.git"
+  },
+  "keywords": [
+    "tiptap",
+    "tiptap extension",
+    "table",
+    "pagination"
+  ],
+  "author": "Romik Makavana",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/RomikMakavana/tiptap-table-plus/issues"
+  },
+  "homepage": "https://romikmakavana.me/tiptap/table-plus",
+  "peerDependencies": {
+    "@tiptap/core": "^3.20.0",
+    "@tiptap/extension-table": "^3.20.0",
+    "@tiptap/extension-table-cell": "^3.20.0",
+    "@tiptap/extension-table-header": "^3.20.0",
+    "@tiptap/extension-table-row": "^3.20.0",
+    "@tiptap/pm": "^3.20.0"
+  },
+  "devDependencies": {
+    "css-property-parser": "^1.0.6",
+    "@tiptap/core": "^3.20.4",
+    "@tiptap/extension-table": "^3.20.4",
+    "@tiptap/extension-table-cell": "^3.20.4",
+    "@tiptap/extension-table-header": "^3.20.4",
+    "@tiptap/extension-table-row": "^3.20.4",
+    "@tiptap/pm": "^3.20.4",
+    "@types/node": "^22.15.2",
+    "tsc-watch": "^6.0.4",
+    "typescript": "^5.8.3"
+  }
+}
