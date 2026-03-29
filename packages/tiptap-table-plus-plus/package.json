@@ -1,5 +1,5 @@
 {
-  "name": "tiptap-table-plus-plus",
+  "name": "@tiptap-boost/tiptap-table-plus-plus",
   "version": "0.0.1",
   "description": "Titap table extension based on tiptap-table-plus, with added support for table borders and styling.",
   "type": "module",
