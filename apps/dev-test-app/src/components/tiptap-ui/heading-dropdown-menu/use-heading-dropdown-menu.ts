@@ -1,13 +1,13 @@
-"use client"
+'use client'
 
-import { useEffect, useState } from "react"
-import type { Editor } from "@tiptap/react"
+import { useEffect, useState } from 'react'
+import type { Editor } from '@tiptap/react'
 
 // --- Hooks ---
-import { useTiptapEditor } from "@/hooks/use-tiptap-editor"
+import { useTiptapEditor } from '@/hooks/use-tiptap-editor'
 
 // --- Icons ---
-import { HeadingIcon } from "@/components/tiptap-icons/heading-icon"
+import { HeadingIcon } from '@/components/tiptap-icons/heading-icon'
 
 // --- Tiptap UI ---
 import {
@@ -16,7 +16,7 @@ import {
   isHeadingActive,
   canToggle,
   shouldShowButton,
-} from "@/components/tiptap-ui/heading-button"
+} from '@/components/tiptap-ui/heading-button'
 
 /**
  * Configuration for the heading dropdown menu functionality
@@ -106,17 +106,15 @@ export function useHeadingDropdownMenu(config?: UseHeadingDropdownMenuConfig) {
     if (!editor) return
 
     const handleSelectionUpdate = () => {
-      setIsVisible(
-        shouldShowButton({ editor, hideWhenUnavailable, level: levels })
-      )
+      setIsVisible(shouldShowButton({ editor, hideWhenUnavailable, level: levels }))
     }
 
     handleSelectionUpdate()
 
-    editor.on("selectionUpdate", handleSelectionUpdate)
+    editor.on('selectionUpdate', handleSelectionUpdate)
 
     return () => {
-      editor.off("selectionUpdate", handleSelectionUpdate)
+      editor.off('selectionUpdate', handleSelectionUpdate)
     }
   }, [editor, hideWhenUnavailable, levels])
 
@@ -126,7 +124,7 @@ export function useHeadingDropdownMenu(config?: UseHeadingDropdownMenuConfig) {
     isActive,
     canToggle: canToggleState,
     levels,
-    label: "Heading",
+    label: 'Heading',
     Icon: activeLevel ? headingIcons[activeLevel] : HeadingIcon,
   }
 }

@@ -17,4 +17,4 @@ export const TABLE_TEST_DOC = `
   </tr>
   </tbody>
 </table>
-`;
+`

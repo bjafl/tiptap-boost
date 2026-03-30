@@ -1,15 +1,7 @@
-import { STYLE_CACHE } from './cache';
-import { expand } from './expand';
-import { parseDeclarations } from './parse';
-import {
-  StyleTuple,
-  Side,
-  SIDES,
-  AtomicKey,
-  StyleQuery,
-  StyleBase,
-  StyleKey,
-} from './types';
+import { STYLE_CACHE } from './cache'
+import { expand } from './expand'
+import { parseDeclarations } from './parse'
+import { StyleTuple, Side, SIDES, AtomicKey, StyleQuery, StyleBase, StyleKey } from './types'
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -27,8 +19,8 @@ import {
  * // ]
  */
 export function parseStyleString(cssText: string): StyleTuple[] {
-  const raw = parseDeclarations(cssText);
-  return raw.flatMap(([prop, val]) => expand(prop, val));
+  const raw = parseDeclarations(cssText)
+  return raw.flatMap(([prop, val]) => expand(prop, val))
 }
 
 /**
@@ -40,13 +32,13 @@ export function parseStyleString(cssText: string): StyleTuple[] {
  * styles.get('borderTopWidth') // → '1px'
  */
 export function parseElement(el: HTMLElement): Map<AtomicKey, string> {
-  const styleStr = el.style.cssText; // get raw cssText (not a live map)
+  const styleStr = el.style.cssText // get raw cssText (not a live map)
   if (STYLE_CACHE.has(styleStr)) {
-    return STYLE_CACHE.get(styleStr)!;
+    return STYLE_CACHE.get(styleStr)!
   }
-  const styles = mergeStyles(parseStyleString(styleStr));
-  STYLE_CACHE.set(styleStr, styles);
-  return styles;
+  const styles = mergeStyles(parseStyleString(styleStr))
+  STYLE_CACHE.set(styleStr, styles)
+  return styles
 }
 
 /**
@@ -69,30 +61,30 @@ export function parseElement(el: HTMLElement): Map<AtomicKey, string> {
  *   getStyle(el, 'borderTop')       // → '2px dashed blue'
  */
 export function getStyle(el: HTMLElement, key: StyleKey): string | null {
-  const map = parseElement(el);
+  const map = parseElement(el)
   // 1. Direct atomic lookup
   // if (isAtomicKey(key)) return map.get(key) ?? null;
   if (key in map) {
-    const val = map.get(key as AtomicKey);
-    if (val !== undefined) return val; // should never be undefined..
+    const val = map.get(key as AtomicKey)
+    if (val !== undefined) return val // should never be undefined..
   }
 
   // 2. Per-side border shorthand: 'borderTop' | 'borderRight' | ...
-  const borderSide = SIDES.find((s) => key === `border${s}`);
-  if (borderSide) return serializeBorderSide(map, borderSide);
+  const borderSide = SIDES.find((s) => key === `border${s}`)
+  if (borderSide) return serializeBorderSide(map, borderSide)
 
   // 3. Base shorthands
   switch (key as StyleBase) {
     case 'border':
-      return serializeBorder(map);
+      return serializeBorder(map)
     case 'padding':
-      return serializeSides(map, 'padding');
+      return serializeSides(map, 'padding')
     case 'margin':
-      return serializeSides(map, 'margin');
+      return serializeSides(map, 'margin')
     case 'background':
-      return map.get('backgroundColor') ?? null;
+      return map.get('backgroundColor') ?? null
     default:
-      return map.get(key as AtomicKey) ?? null;
+      return map.get(key as AtomicKey) ?? null
   }
 }
 
@@ -103,16 +95,13 @@ export function getStyle(el: HTMLElement, key: StyleKey): string | null {
  * getBaseStyles(tdElement, 'border')
  * // → Map { 'borderTopWidth' => '1px', 'borderTopStyle' => 'solid', ... }
  */
-export function getBaseStyles(
-  el: HTMLElement,
-  base: StyleBase
-): Map<AtomicKey, string> {
-  const all = parseElement(el);
-  const result = new Map<AtomicKey, string>();
+export function getBaseStyles(el: HTMLElement, base: StyleBase): Map<AtomicKey, string> {
+  const all = parseElement(el)
+  const result = new Map<AtomicKey, string>()
   for (const [key, value] of all) {
-    if (key.startsWith(base)) result.set(key, value);
+    if (key.startsWith(base)) result.set(key, value)
   }
-  return result;
+  return result
 }
 
 /**
@@ -120,15 +109,15 @@ export function getBaseStyles(
  * deduplicated map where later entries take precedence – matching CSS cascade.
  */
 export function mergeStyles(tuples: StyleTuple[]): Map<AtomicKey, string> {
-  const map = new Map<AtomicKey, string>();
+  const map = new Map<AtomicKey, string>()
   for (const [key, value] of tuples) {
-    map.set(key, value); // later wins
+    map.set(key, value) // later wins
   }
-  return map;
+  return map
 }
 
 export function parseStyleMap(cssText: string): Map<AtomicKey, string> {
-  return mergeStyles(parseStyleString(cssText));
+  return mergeStyles(parseStyleString(cssText))
 }
 
 // ---------------------------------------------------------------------------
@@ -143,34 +132,28 @@ export function parseStyleMap(cssText: string): Map<AtomicKey, string> {
  *   all different      → "T R B L"
  * Returns null if any side is missing.
  */
-function serializeSides(
-  map: Map<AtomicKey, string>,
-  base: string
-): string | null {
-  const T = map.get(`${base}Top` as AtomicKey);
-  const R = map.get(`${base}Right` as AtomicKey);
-  const B = map.get(`${base}Bottom` as AtomicKey);
-  const L = map.get(`${base}Left` as AtomicKey);
-  if (!T || !R || !B || !L) return null;
-  if (T === R && T === B && T === L) return T;
-  if (T === B && R === L) return `${T} ${R}`;
-  if (R === L) return `${T} ${R} ${B}`;
-  return `${T} ${R} ${B} ${L}`;
+function serializeSides(map: Map<AtomicKey, string>, base: string): string | null {
+  const T = map.get(`${base}Top` as AtomicKey)
+  const R = map.get(`${base}Right` as AtomicKey)
+  const B = map.get(`${base}Bottom` as AtomicKey)
+  const L = map.get(`${base}Left` as AtomicKey)
+  if (!T || !R || !B || !L) return null
+  if (T === R && T === B && T === L) return T
+  if (T === B && R === L) return `${T} ${R}`
+  if (R === L) return `${T} ${R} ${B}`
+  return `${T} ${R} ${B} ${L}`
 }
 
 /**
  * Serialize border parts (width style color) for one side.
  * Returns null if no parts are present.
  */
-function serializeBorderSide(
-  map: Map<AtomicKey, string>,
-  side: Side
-): string | null {
-  const w = map.get(`border${side}Width` as AtomicKey);
-  const s = map.get(`border${side}Style` as AtomicKey);
-  const c = map.get(`border${side}Color` as AtomicKey);
-  if (!w && !s && !c) return null;
-  return [w, s, c].filter(Boolean).join(' ');
+function serializeBorderSide(map: Map<AtomicKey, string>, side: Side): string | null {
+  const w = map.get(`border${side}Width` as AtomicKey)
+  const s = map.get(`border${side}Style` as AtomicKey)
+  const c = map.get(`border${side}Color` as AtomicKey)
+  if (!w && !s && !c) return null
+  return [w, s, c].filter(Boolean).join(' ')
 }
 
 /**
@@ -178,9 +161,9 @@ function serializeBorderSide(
  * Only possible when all four sides are identical.
  */
 function serializeBorder(map: Map<AtomicKey, string>): string | null {
-  const sides = SIDES.map((side) => serializeBorderSide(map, side));
-  if (sides.some((s) => s === null)) return null;
+  const sides = SIDES.map((side) => serializeBorderSide(map, side))
+  if (sides.some((s) => s === null)) return null
   // All sides equal → can use 'border' shorthand
-  if (sides.every((s) => s === sides[0])) return sides[0]!;
-  return null; // sides differ – caller must use per-side keys
+  if (sides.every((s) => s === sides[0])) return sides[0]!
+  return null // sides differ – caller must use per-side keys
 }

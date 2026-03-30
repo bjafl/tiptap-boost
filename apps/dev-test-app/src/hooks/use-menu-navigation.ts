@@ -1,7 +1,7 @@
-import type { Editor } from "@tiptap/react"
-import { useEffect, useState } from "react"
+import type { Editor } from '@tiptap/react'
+import { useEffect, useState } from 'react'
 
-type Orientation = "horizontal" | "vertical" | "both"
+type Orientation = 'horizontal' | 'vertical' | 'both'
 
 interface MenuNavigationOptions<T> {
   /**
@@ -56,12 +56,10 @@ export function useMenuNavigation<T>({
   items,
   onSelect,
   onClose,
-  orientation = "vertical",
+  orientation = 'vertical',
   autoSelectFirstItem = true,
 }: MenuNavigationOptions<T>) {
-  const [selectedIndex, setSelectedIndex] = useState<number>(
-    autoSelectFirstItem ? 0 : -1
-  )
+  const [selectedIndex, setSelectedIndex] = useState<number>(autoSelectFirstItem ? 0 : -1)
 
   useEffect(() => {
     const handleKeyboardNavigation = (event: KeyboardEvent) => {
@@ -80,35 +78,35 @@ export function useMenuNavigation<T>({
         })
 
       switch (event.key) {
-        case "ArrowUp": {
-          if (orientation === "horizontal") return false
+        case 'ArrowUp': {
+          if (orientation === 'horizontal') return false
           event.preventDefault()
           movePrev()
           return true
         }
 
-        case "ArrowDown": {
-          if (orientation === "horizontal") return false
+        case 'ArrowDown': {
+          if (orientation === 'horizontal') return false
           event.preventDefault()
           moveNext()
           return true
         }
 
-        case "ArrowLeft": {
-          if (orientation === "vertical") return false
+        case 'ArrowLeft': {
+          if (orientation === 'vertical') return false
           event.preventDefault()
           movePrev()
           return true
         }
 
-        case "ArrowRight": {
-          if (orientation === "vertical") return false
+        case 'ArrowRight': {
+          if (orientation === 'vertical') return false
           event.preventDefault()
           moveNext()
           return true
         }
 
-        case "Tab": {
+        case 'Tab': {
           event.preventDefault()
           if (event.shiftKey) {
             movePrev()
@@ -118,19 +116,19 @@ export function useMenuNavigation<T>({
           return true
         }
 
-        case "Home": {
+        case 'Home': {
           event.preventDefault()
           setSelectedIndex(0)
           return true
         }
 
-        case "End": {
+        case 'End': {
           event.preventDefault()
           setSelectedIndex(items.length - 1)
           return true
         }
 
-        case "Enter": {
+        case 'Enter': {
           if (event.isComposing) return false
           event.preventDefault()
           if (selectedIndex !== -1 && items[selectedIndex]) {
@@ -139,7 +137,7 @@ export function useMenuNavigation<T>({
           return true
         }
 
-        case "Escape": {
+        case 'Escape': {
           event.preventDefault()
           onClose?.()
           return true
@@ -159,27 +157,15 @@ export function useMenuNavigation<T>({
     }
 
     if (targetElement) {
-      targetElement.addEventListener("keydown", handleKeyboardNavigation, true)
+      targetElement.addEventListener('keydown', handleKeyboardNavigation, true)
 
       return () => {
-        targetElement?.removeEventListener(
-          "keydown",
-          handleKeyboardNavigation,
-          true
-        )
+        targetElement?.removeEventListener('keydown', handleKeyboardNavigation, true)
       }
     }
 
     return undefined
-  }, [
-    editor,
-    containerRef,
-    items,
-    selectedIndex,
-    onSelect,
-    onClose,
-    orientation,
-  ])
+  }, [editor, containerRef, items, selectedIndex, onSelect, onClose, orientation])
 
   useEffect(() => {
     if (query) {

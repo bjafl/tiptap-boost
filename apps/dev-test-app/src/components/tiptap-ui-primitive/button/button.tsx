@@ -1,20 +1,16 @@
-import { forwardRef, Fragment, useMemo } from "react"
+import { forwardRef, Fragment, useMemo } from 'react'
 
 // --- Tiptap UI Primitive ---
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/tiptap-ui-primitive/tooltip"
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/tiptap-ui-primitive/tooltip'
 
 // --- Lib ---
-import { cn, parseShortcutKeys } from "@/lib/tiptap-utils"
+import { cn, parseShortcutKeys } from '@/lib/tiptap-utils'
 
-import "@/components/tiptap-ui-primitive/button/button-colors.scss"
-import "@/components/tiptap-ui-primitive/button/button.scss"
+import '@/components/tiptap-ui-primitive/button/button-colors.scss'
+import '@/components/tiptap-ui-primitive/button/button.scss'
 
-export type ButtonVariant = "ghost" | "primary"
-export type ButtonSize = "small" | "default" | "large"
+export type ButtonVariant = 'ghost' | 'primary'
+export type ButtonSize = 'small' | 'default' | 'large'
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   showTooltip?: boolean
@@ -24,9 +20,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   size?: ButtonSize
 }
 
-export const ShortcutDisplay: React.FC<{ shortcuts: string[] }> = ({
-  shortcuts,
-}) => {
+export const ShortcutDisplay: React.FC<{ shortcuts: string[] }> = ({ shortcuts }) => {
   if (shortcuts.length === 0) return null
 
   return (
@@ -43,28 +37,16 @@ export const ShortcutDisplay: React.FC<{ shortcuts: string[] }> = ({
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   (
-    {
-      className,
-      children,
-      tooltip,
-      showTooltip = true,
-      shortcutKeys,
-      variant,
-      size,
-      ...props
-    },
+    { className, children, tooltip, showTooltip = true, shortcutKeys, variant, size, ...props },
     ref
   ) => {
-    const shortcuts = useMemo<string[]>(
-      () => parseShortcutKeys({ shortcutKeys }),
-      [shortcutKeys]
-    )
+    const shortcuts = useMemo<string[]>(() => parseShortcutKeys({ shortcutKeys }), [shortcutKeys])
 
     if (!tooltip || !showTooltip) {
       return (
         <button
           data-slot="tiptap-button"
-          className={cn("tiptap-button", className)}
+          className={cn('tiptap-button', className)}
           ref={ref}
           data-style={variant}
           data-size={size}
@@ -79,7 +61,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <Tooltip delay={200}>
         <TooltipTrigger
           data-slot="tiptap-button"
-          className={cn("tiptap-button", className)}
+          className={cn('tiptap-button', className)}
           ref={ref}
           data-style={variant}
           data-size={size}
@@ -96,6 +78,6 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   }
 )
 
-Button.displayName = "Button"
+Button.displayName = 'Button'
 
 export default Button

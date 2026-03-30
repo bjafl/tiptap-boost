@@ -1,6 +1,5 @@
 {
   "compilerOptions": {
-
     "paths": {
       "@/*": ["./src/*"],
       "@tiptap-boost/pdf": ["../../packages/pdf/src/index.ts"],
@@ -8,8 +7,5 @@
     }
   },
   "files": [],
-  "references": [
-    { "path": "./tsconfig.app.json" },
-    { "path": "./tsconfig.node.json" }
-  ]
+  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" }]
 }

@@ -1,6 +1,6 @@
-import { memo } from "react"
+import { memo } from 'react'
 
-type SvgProps = React.ComponentPropsWithoutRef<"svg">
+type SvgProps = React.ComponentPropsWithoutRef<'svg'>
 
 export const SunIcon = memo(({ className, ...props }: SvgProps) => {
   return (
@@ -55,4 +55,4 @@ export const SunIcon = memo(({ className, ...props }: SvgProps) => {
   )
 })
 
-SunIcon.displayName = "SunIcon"
+SunIcon.displayName = 'SunIcon'

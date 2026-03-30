@@ -1,5 +1,5 @@
-import { SimpleEditor } from './Editor';
+import { SimpleEditor } from './Editor'
 
 export default function App() {
-  return <SimpleEditor />;
+  return <SimpleEditor />
 }

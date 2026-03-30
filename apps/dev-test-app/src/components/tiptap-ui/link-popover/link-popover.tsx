@@ -1,40 +1,32 @@
-"use client"
+'use client'
 
-import { forwardRef, useCallback, useEffect, useState } from "react"
-import type { Editor } from "@tiptap/react"
+import { forwardRef, useCallback, useEffect, useState } from 'react'
+import type { Editor } from '@tiptap/react'
 
 // --- Hooks ---
-import { useIsBreakpoint } from "@/hooks/use-is-breakpoint"
-import { useTiptapEditor } from "@/hooks/use-tiptap-editor"
+import { useIsBreakpoint } from '@/hooks/use-is-breakpoint'
+import { useTiptapEditor } from '@/hooks/use-tiptap-editor'
 
 // --- Icons ---
-import { CornerDownLeftIcon } from "@/components/tiptap-icons/corner-down-left-icon"
-import { ExternalLinkIcon } from "@/components/tiptap-icons/external-link-icon"
-import { LinkIcon } from "@/components/tiptap-icons/link-icon"
-import { TrashIcon } from "@/components/tiptap-icons/trash-icon"
+import { CornerDownLeftIcon } from '@/components/tiptap-icons/corner-down-left-icon'
+import { ExternalLinkIcon } from '@/components/tiptap-icons/external-link-icon'
+import { LinkIcon } from '@/components/tiptap-icons/link-icon'
+import { TrashIcon } from '@/components/tiptap-icons/trash-icon'
 
 // --- Tiptap UI ---
-import type { UseLinkPopoverConfig } from "@/components/tiptap-ui/link-popover"
-import { useLinkPopover } from "@/components/tiptap-ui/link-popover"
+import type { UseLinkPopoverConfig } from '@/components/tiptap-ui/link-popover'
+import { useLinkPopover } from '@/components/tiptap-ui/link-popover'
 
 // --- UI Primitives ---
-import type { ButtonProps } from "@/components/tiptap-ui-primitive/button"
-import { Button } from "@/components/tiptap-ui-primitive/button"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/tiptap-ui-primitive/popover"
-import { Separator } from "@/components/tiptap-ui-primitive/separator"
-import {
-  Card,
-  CardBody,
-  CardItemGroup,
-} from "@/components/tiptap-ui-primitive/card"
-import { Input } from "@/components/tiptap-ui-primitive/input"
-import { ButtonGroup } from "@/components/tiptap-ui-primitive/button-group"
+import type { ButtonProps } from '@/components/tiptap-ui-primitive/button'
+import { Button } from '@/components/tiptap-ui-primitive/button'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/tiptap-ui-primitive/popover'
+import { Separator } from '@/components/tiptap-ui-primitive/separator'
+import { Card, CardBody, CardItemGroup } from '@/components/tiptap-ui-primitive/card'
+import { Input } from '@/components/tiptap-ui-primitive/input'
+import { ButtonGroup } from '@/components/tiptap-ui-primitive/button-group'
 
-import "./link-popover.scss"
+import './link-popover.scss'
 
 export interface LinkMainProps {
   /**
@@ -63,8 +55,7 @@ export interface LinkMainProps {
   isActive: boolean
 }
 
-export interface LinkPopoverProps
-  extends Omit<ButtonProps, "type">, UseLinkPopoverConfig {
+export interface LinkPopoverProps extends Omit<ButtonProps, 'type'>, UseLinkPopoverConfig {
   /**
    * Callback for when the popover opens or closes.
    */
@@ -99,7 +90,7 @@ export const LinkButton = forwardRef<HTMLButtonElement, ButtonProps>(
   }
 )
 
-LinkButton.displayName = "LinkButton"
+LinkButton.displayName = 'LinkButton'
 
 /**
  * Main content component for the link popover
@@ -115,7 +106,7 @@ const LinkMain: React.FC<LinkMainProps> = ({
   const isMobile = useIsBreakpoint()
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Enter") {
+    if (event.key === 'Enter') {
       event.preventDefault()
       setLink()
     }
@@ -124,7 +115,7 @@ const LinkMain: React.FC<LinkMainProps> = ({
   return (
     <Card
       style={{
-        ...(isMobile ? { boxShadow: "none", border: 0 } : {}),
+        ...(isMobile ? { boxShadow: 'none', border: 0 } : {}),
       }}
     >
       <CardBody
@@ -226,22 +217,12 @@ export const LinkPopover = forwardRef<HTMLButtonElement, LinkPopoverProps>(
     const { editor } = useTiptapEditor(providedEditor)
     const [isOpen, setIsOpen] = useState(false)
 
-    const {
-      isVisible,
-      canSet,
-      isActive,
-      url,
-      setUrl,
-      setLink,
-      removeLink,
-      openLink,
-      label,
-      Icon,
-    } = useLinkPopover({
-      editor,
-      hideWhenUnavailable,
-      onSetLink,
-    })
+    const { isVisible, canSet, isActive, url, setUrl, setLink, removeLink, openLink, label, Icon } =
+      useLinkPopover({
+        editor,
+        hideWhenUnavailable,
+        onSetLink,
+      })
 
     const handleOnOpenChange = useCallback(
       (nextIsOpen: boolean) => {
@@ -280,7 +261,7 @@ export const LinkPopover = forwardRef<HTMLButtonElement, LinkPopoverProps>(
         <PopoverTrigger asChild>
           <LinkButton
             disabled={!canSet}
-            data-active-state={isActive ? "on" : "off"}
+            data-active-state={isActive ? 'on' : 'off'}
             data-disabled={!canSet}
             aria-label={label}
             aria-pressed={isActive}
@@ -307,6 +288,6 @@ export const LinkPopover = forwardRef<HTMLButtonElement, LinkPopoverProps>(
   }
 )
 
-LinkPopover.displayName = "LinkPopover"
+LinkPopover.displayName = 'LinkPopover'
 
 export default LinkPopover

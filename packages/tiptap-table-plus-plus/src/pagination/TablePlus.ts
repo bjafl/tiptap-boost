@@ -1,14 +1,11 @@
-import {
-  Table as TipTapTable,
-  TableOptions as TipTapTableOptions,
-} from '@tiptap/extension-table';
-import { mergeAttributes } from '@tiptap/core';
-import { DOMOutputSpec } from '@tiptap/pm/model';
-import { TableRowGroup } from './TableRowGroup';
-import { TableCommandExtension } from '../TableCommandExtension';
-import { TablePlusNodeView } from './TablePlusNodeView';
-import { Plugin, PluginKey } from '@tiptap/pm/state';
-import { ReplaceStep } from '@tiptap/pm/transform';
+import { Table as TipTapTable, TableOptions as TipTapTableOptions } from '@tiptap/extension-table'
+import { mergeAttributes } from '@tiptap/core'
+import { DOMOutputSpec } from '@tiptap/pm/model'
+import { TableRowGroup } from './TableRowGroup'
+import { TableCommandExtension } from '../TableCommandExtension'
+import { TablePlusNodeView } from './TablePlusNodeView'
+import { Plugin, PluginKey } from '@tiptap/pm/state'
+import { ReplaceStep } from '@tiptap/pm/transform'
 import {
   findParentNodeOfType,
   findParentNodeOfTypeAtPos,
@@ -16,20 +13,16 @@ import {
   addColumns,
   isNodeAtRange,
   getColumnSizeList,
-} from '../utilities/utils';
-import { Node } from '@tiptap/pm/model';
-import {
-  widthAttr,
-  backgroundColorAttr,
-  borderAttrs,
-} from '../utilities/attributes';
-import { tableStyle } from '../utilities/renderStyle';
-import { normalizeTableBorders } from '../utilities/borderCollapse';
+} from '../utilities/utils'
+import { Node } from '@tiptap/pm/model'
+import { widthAttr, backgroundColorAttr, borderAttrs } from '../utilities/attributes'
+import { tableStyle } from '../utilities/renderStyle'
+import { normalizeTableBorders } from '../utilities/borderCollapse'
 
 export interface TablePlusOptions extends Partial<TipTapTableOptions> {
-  resizeHandleStyle?: Partial<CSSStyleDeclaration>;
-  minColumnSize?: number;
-  borderColor?: string;
+  resizeHandleStyle?: Partial<CSSStyleDeclaration>
+  minColumnSize?: number
+  borderColor?: string
 }
 
 export const TablePlus = TipTapTable.extend<TablePlusOptions>({
@@ -42,10 +35,10 @@ export const TablePlus = TipTapTable.extend<TablePlusOptions>({
       },
       minColumnSize: 50,
       borderColor: 'black',
-    };
+    }
   },
   addExtensions() {
-    return [TableRowGroup, TableCommandExtension];
+    return [TableRowGroup, TableCommandExtension]
   },
   addAttributes() {
     return {
@@ -53,17 +46,15 @@ export const TablePlus = TipTapTable.extend<TablePlusOptions>({
       columnSize: {
         default: '',
         parseHTML: (element) => {
-          const columnSize = element.getAttribute('data-column-size') || '';
-          const columnSizeList = columnSize.split(',');
-          const isAllNumber = columnSizeList.every(
-            (a: string) => !isNaN(Number(a))
-          );
-          return isAllNumber ? columnSizeList.join(',') : '';
+          const columnSize = element.getAttribute('data-column-size') || ''
+          const columnSizeList = columnSize.split(',')
+          const isAllNumber = columnSizeList.every((a: string) => !isNaN(Number(a)))
+          return isAllNumber ? columnSizeList.join(',') : ''
         },
         renderHTML: (attributes) => {
           return {
             'data-column-size': attributes.columnSize,
-          };
+          }
         },
       },
       width: widthAttr(false),
@@ -74,107 +65,96 @@ export const TablePlus = TipTapTable.extend<TablePlusOptions>({
         default: null,
         keepOnSplit: false,
         parseHTML: (el: HTMLElement) => {
-          const val = el.getAttribute('border');
-          if (!val || val === '0') return null;
-          const width = /^\d+$/.test(val) ? `${val}px` : val;
-          return `${width} solid`;
+          const val = el.getAttribute('border')
+          if (!val || val === '0') return null
+          const width = /^\d+$/.test(val) ? `${val}px` : val
+          return `${width} solid`
         },
         renderHTML: () => ({}), // not serialized back to HTML
       },
       ...borderAttrs(false),
-    };
+    }
   },
   renderHTML({ node, HTMLAttributes }) {
     const table: DOMOutputSpec = [
       'table',
-      mergeAttributes(
-        this.options.HTMLAttributes ?? {},
-        HTMLAttributes,
-        tableStyle(node.attrs)
-      ),
+      mergeAttributes(this.options.HTMLAttributes ?? {}, HTMLAttributes, tableStyle(node.attrs)),
       0,
-    ];
-    return table;
+    ]
+    return table
   },
   addNodeView() {
-    return ({ node, getPos, editor }) =>
-      new TablePlusNodeView(node, getPos, editor, this.options);
+    return ({ node, getPos, editor }) => new TablePlusNodeView(node, getPos, editor, this.options)
   },
   addProseMirrorPlugins() {
     return [
       new Plugin({
         key: new PluginKey('tableBorderNormalize'),
         appendTransaction: (transactions, _oldState, newState) => {
-          console.log('Running table border normalization plugin...');
-          if (!transactions.some((t) => t.docChanged)) return null;
+          console.log('Running table border normalization plugin...')
+          if (!transactions.some((t) => t.docChanged)) return null
 
-          let tr = newState.tr;
-          let changed = false;
+          let tr = newState.tr
+          let changed = false
 
           newState.doc.descendants((node, pos) => {
-            if (node.type.name !== 'table') return;
+            if (node.type.name !== 'table') return
 
             // normalizeTableBorders is idempotent — returns false
             // when nothing changes, so always safe to call.
             if (normalizeTableBorders(tr, pos)) {
-              changed = true;
+              changed = true
             }
-          });
+          })
 
-          return changed ? tr : null;
+          return changed ? tr : null
         },
       }),
       new Plugin({
         key: new PluginKey('tablePlusPlugin'),
         appendTransaction: (transactions, oldState, newState) => {
-          let tr = newState.tr;
-          let isThereUpdate = false;
-          let position = 0;
-          let newStateTable: { start: number; node: Node }[] = [];
+          let tr = newState.tr
+          let isThereUpdate = false
+          let position = 0
+          let newStateTable: { start: number; node: Node }[] = []
           transactions.forEach((transaction) => {
             if (transaction.steps.length > 0) {
-              let tables: { start: number; node: Node }[] = [];
+              let tables: { start: number; node: Node }[] = []
               // List all steps performed inside table
               const _steps = transaction.steps.filter((step) => {
-                if (!(step instanceof ReplaceStep)) return false;
-                let currentPosition =
-                  step.slice.content.size - (step.to - step.from);
-                position = position + currentPosition;
+                if (!(step instanceof ReplaceStep)) return false
+                let currentPosition = step.slice.content.size - (step.to - step.from)
+                position = position + currentPosition
                 // Check for is going to remove
-                let _from = step.from - (position - currentPosition);
-                let _to = step.to - (position - currentPosition);
+                let _from = step.from - (position - currentPosition)
+                let _to = step.to - (position - currentPosition)
                 if (
                   oldState.doc.content.size < _from ||
                   oldState.doc.content.size < _to ||
                   _from < 0 ||
                   _to < 0
                 )
-                  return false;
+                  return false
 
                 if (_from < 0 || _to < 0) {
-                  return false;
+                  return false
                 }
 
-                if (
-                  _from > oldState.doc.content.size ||
-                  _to > oldState.doc.content.size
-                ) {
-                  return false;
+                if (_from > oldState.doc.content.size || _to > oldState.doc.content.size) {
+                  return false
                 }
 
-                let _table = findParentNodeOfType(oldState, _from, this.type);
-                if (!_table) return false;
+                let _table = findParentNodeOfType(oldState, _from, this.type)
+                if (!_table) return false
 
-                let tableAlreadyExist = tables.find(
-                  (table) => table.start === _table.start
-                );
+                let tableAlreadyExist = tables.find((table) => table.start === _table.start)
                 if (!tableAlreadyExist) {
-                  tables.push({ start: _table.start, node: _table.node });
+                  tables.push({ start: _table.start, node: _table.node })
                 }
 
                 // check all table cells are going to replace
                 // Check for is going to add
-                let isAdd = false;
+                let isAdd = false
                 if (
                   step.slice.content &&
                   'content' in step.slice.content &&
@@ -183,133 +163,108 @@ export const TablePlus = TipTapTable.extend<TablePlusOptions>({
                 ) {
                   isAdd = step.slice.content.content.every((node) =>
                     ['tableCell', 'tableHeader'].includes(node.type.name)
-                  );
+                  )
                 }
-                if (isAdd) return true;
+                if (isAdd) return true
 
-                let isRemove = isNodeAtRange(oldState, _from, _to, [
-                  'tableCell',
-                  'tableHeader',
-                ]);
+                let isRemove = isNodeAtRange(oldState, _from, _to, ['tableCell', 'tableHeader'])
 
-                if (isRemove) return true;
+                if (isRemove) return true
 
-                return false;
-              });
+                return false
+              })
 
               if (_steps.length > 0 && tables.length == 1) {
-                let position = 0;
+                let position = 0
                 _steps.forEach((step) => {
-                  if (!(step instanceof ReplaceStep)) return false;
-                  let currentPosition =
-                    step.slice.content.size - (step.to - step.from);
-                  position = position + currentPosition;
+                  if (!(step instanceof ReplaceStep)) return false
+                  let currentPosition = step.slice.content.size - (step.to - step.from)
+                  position = position + currentPosition
 
                   // Check for is going to remove
-                  let _from = step.from - (position - currentPosition);
-                  let _to = step.to - (position - currentPosition);
+                  let _from = step.from - (position - currentPosition)
+                  let _to = step.to - (position - currentPosition)
 
                   if (_from < 0 || _to < 0) {
-                    return false;
+                    return false
                   }
 
-                  if (
-                    _from > oldState.doc.content.size ||
-                    _to > oldState.doc.content.size
-                  ) {
-                    return false;
+                  if (_from > oldState.doc.content.size || _to > oldState.doc.content.size) {
+                    return false
                   }
 
-                  let _table = findParentNodeOfType(oldState, _from, this.type);
+                  let _table = findParentNodeOfType(oldState, _from, this.type)
 
                   if (step.from < 0 || step.from > newState.doc.content.size) {
-                    return false;
+                    return false
                   }
 
-                  let newStateTable = findParentNodeOfTypeAtPos(
-                    step.from,
-                    newState.doc,
-                    this.type
-                  );
+                  let newStateTable = findParentNodeOfTypeAtPos(step.from, newState.doc, this.type)
 
-                  if (!_table || !newStateTable) return false;
+                  if (!_table || !newStateTable) return false
 
                   let tableRow: {
-                    from: number;
-                    to: number;
-                    node: Node | null;
+                    from: number
+                    to: number
+                    node: Node | null
                   } = {
                     from: 0,
                     to: 0,
                     node: null,
-                  };
-                  oldState.doc.nodesBetween(
-                    _table.start,
-                    _table.end,
-                    (node, pos) => {
-                      if (
-                        node.type.name === 'tableRow' &&
-                        (tableRow.node == null ||
-                          tableRow.node.childCount < node.childCount)
-                      ) {
-                        tableRow = {
-                          from: pos,
-                          to: pos + node.nodeSize,
-                          node: node,
-                        };
-                        return true;
+                  }
+                  oldState.doc.nodesBetween(_table.start, _table.end, (node, pos) => {
+                    if (
+                      node.type.name === 'tableRow' &&
+                      (tableRow.node == null || tableRow.node.childCount < node.childCount)
+                    ) {
+                      tableRow = {
+                        from: pos,
+                        to: pos + node.nodeSize,
+                        node: node,
                       }
+                      return true
                     }
-                  );
-                  if (tableRow.node == null) return;
+                  })
+                  if (tableRow.node == null) return
                   if (_from >= tableRow.from && _to <= tableRow.to) {
                     // get existing size list
-                    let columnSize = getColumnSizeList(
-                      _table.node.attrs.columnSize
-                    );
+                    let columnSize = getColumnSizeList(_table.node.attrs.columnSize)
                     let letCellList: {
-                      node: Node;
-                      from: number;
-                      to: number;
-                    }[] = [];
+                      node: Node
+                      from: number
+                      to: number
+                    }[] = []
 
-                    oldState.doc.nodesBetween(
-                      tableRow.from,
-                      tableRow.to,
-                      (node, pos) => {
-                        if (
-                          node.type.name === 'tableCell' ||
-                          node.type.name === 'tableHeader'
-                        ) {
-                          letCellList.push({
-                            node: node,
-                            from: pos,
-                            to: pos + node.nodeSize,
-                          });
-                          return true;
-                        }
+                    oldState.doc.nodesBetween(tableRow.from, tableRow.to, (node, pos) => {
+                      if (node.type.name === 'tableCell' || node.type.name === 'tableHeader') {
+                        letCellList.push({
+                          node: node,
+                          from: pos,
+                          to: pos + node.nodeSize,
+                        })
+                        return true
                       }
-                    );
+                    })
 
                     if (letCellList.length == columnSize.length) {
-                      let removeFromToIndex = { from: 0, count: 0 };
+                      let removeFromToIndex = { from: 0, count: 0 }
 
                       if (step.to > step.from) {
-                        let removeCellIndex: number[] = [];
+                        let removeCellIndex: number[] = []
 
                         letCellList.forEach((cell, index) => {
                           if (cell.from >= step.from && cell.to <= step.to) {
-                            removeCellIndex.push(index);
+                            removeCellIndex.push(index)
                           }
-                        });
+                        })
 
                         removeFromToIndex = {
                           from: Math.min(...removeCellIndex),
                           count: removeCellIndex.length,
-                        };
+                        }
                       }
 
-                      let addNodes: Node[] = [];
+                      let addNodes: Node[] = []
                       if (
                         step.slice.content &&
                         'content' in step.slice.content &&
@@ -318,61 +273,49 @@ export const TablePlus = TipTapTable.extend<TablePlusOptions>({
                       ) {
                         addNodes = step.slice.content.content.filter((node) =>
                           ['tableCell', 'tableHeader'].includes(node.type.name)
-                        );
+                        )
                       }
                       let columnAfterRemove = columnSize
                         .slice(0, removeFromToIndex.from)
-                        .concat(
-                          columnSize.slice(
-                            removeFromToIndex.from + removeFromToIndex.count
-                          )
-                        );
+                        .concat(columnSize.slice(removeFromToIndex.from + removeFromToIndex.count))
 
                       let newColumnWidth =
                         addNodes.length > 0
                           ? Array(addNodes.length).fill(
-                              calculateNewColumnWidth(
-                                columnAfterRemove,
-                                addNodes.length
-                              )
+                              calculateNewColumnWidth(columnAfterRemove, addNodes.length)
                             )
-                          : [];
+                          : []
 
-                      let newColumnSize = addColumns(
-                        columnAfterRemove,
-                        newColumnWidth as number[]
-                      );
+                      let newColumnSize = addColumns(columnAfterRemove, newColumnWidth as number[])
 
                       newState.doc.descendants((node, pos) => {
                         if (node.type.name === 'table') {
                           if (newStateTable.pos === pos) {
                             // Update/add an attribute
-                            if (
-                              node.attrs.columnSize !== newColumnSize.join(',')
-                            ) {
+                            if (node.attrs.columnSize !== newColumnSize.join(',')) {
                               tr = tr.setNodeMarkup(pos, undefined, {
                                 ...node.attrs,
                                 columnSize: newColumnSize.join(','),
-                              });
-                              isThereUpdate = true;
+                              })
+                              isThereUpdate = true
                             }
                           }
                         }
-                      });
+                      })
                     } else {
                       // Calculate totally new column size
                     }
                   }
-                });
+                })
               }
             }
-          });
+          })
 
-          return isThereUpdate ? tr : null;
+          return isThereUpdate ? tr : null
         },
       }),
-    ];
+    ]
   },
-});
+})
 
-export default TablePlus;
+export default TablePlus

@@ -1,89 +1,85 @@
-"use client"
+'use client'
 
-import { useCallback, useEffect, useState } from "react"
-import { type Editor } from "@tiptap/react"
-import { useHotkeys } from "react-hotkeys-hook"
+import { useCallback, useEffect, useState } from 'react'
+import { type Editor } from '@tiptap/react'
+import { useHotkeys } from 'react-hotkeys-hook'
 
 // --- Hooks ---
-import { useTiptapEditor } from "@/hooks/use-tiptap-editor"
-import { useIsBreakpoint } from "@/hooks/use-is-breakpoint"
+import { useTiptapEditor } from '@/hooks/use-tiptap-editor'
+import { useIsBreakpoint } from '@/hooks/use-is-breakpoint'
 
 // --- Lib ---
-import {
-  isMarkInSchema,
-  isNodeTypeSelected,
-  isExtensionAvailable,
-} from "@/lib/tiptap-utils"
+import { isMarkInSchema, isNodeTypeSelected, isExtensionAvailable } from '@/lib/tiptap-utils'
 
 // --- Icons ---
-import { HighlighterIcon } from "@/components/tiptap-icons/highlighter-icon"
+import { HighlighterIcon } from '@/components/tiptap-icons/highlighter-icon'
 
-export const COLOR_HIGHLIGHT_SHORTCUT_KEY = "mod+shift+h"
+export const COLOR_HIGHLIGHT_SHORTCUT_KEY = 'mod+shift+h'
 export const HIGHLIGHT_COLORS = [
   {
-    label: "Default background",
-    value: "var(--tt-bg-color)",
-    colorValue: "#ffffff",
-    border: "var(--tt-bg-color-contrast)",
+    label: 'Default background',
+    value: 'var(--tt-bg-color)',
+    colorValue: '#ffffff',
+    border: 'var(--tt-bg-color-contrast)',
   },
   {
-    label: "Gray background",
-    value: "var(--tt-color-highlight-gray)",
-    colorValue: "#f8f8f7",
-    border: "var(--tt-color-highlight-gray-contrast)",
+    label: 'Gray background',
+    value: 'var(--tt-color-highlight-gray)',
+    colorValue: '#f8f8f7',
+    border: 'var(--tt-color-highlight-gray-contrast)',
   },
   {
-    label: "Brown background",
-    value: "var(--tt-color-highlight-brown)",
-    colorValue: "#f4eeee",
-    border: "var(--tt-color-highlight-brown-contrast)",
+    label: 'Brown background',
+    value: 'var(--tt-color-highlight-brown)',
+    colorValue: '#f4eeee',
+    border: 'var(--tt-color-highlight-brown-contrast)',
   },
   {
-    label: "Orange background",
-    value: "var(--tt-color-highlight-orange)",
-    colorValue: "#fbecdd",
-    border: "var(--tt-color-highlight-orange-contrast)",
+    label: 'Orange background',
+    value: 'var(--tt-color-highlight-orange)',
+    colorValue: '#fbecdd',
+    border: 'var(--tt-color-highlight-orange-contrast)',
   },
   {
-    label: "Yellow background",
-    value: "var(--tt-color-highlight-yellow)",
-    colorValue: "#fef9c3",
-    border: "var(--tt-color-highlight-yellow-contrast)",
+    label: 'Yellow background',
+    value: 'var(--tt-color-highlight-yellow)',
+    colorValue: '#fef9c3',
+    border: 'var(--tt-color-highlight-yellow-contrast)',
   },
   {
-    label: "Green background",
-    value: "var(--tt-color-highlight-green)",
-    colorValue: "#dcfce7",
-    border: "var(--tt-color-highlight-green-contrast)",
+    label: 'Green background',
+    value: 'var(--tt-color-highlight-green)',
+    colorValue: '#dcfce7',
+    border: 'var(--tt-color-highlight-green-contrast)',
   },
   {
-    label: "Blue background",
-    value: "var(--tt-color-highlight-blue)",
-    colorValue: "#e0f2fe",
-    border: "var(--tt-color-highlight-blue-contrast)",
+    label: 'Blue background',
+    value: 'var(--tt-color-highlight-blue)',
+    colorValue: '#e0f2fe',
+    border: 'var(--tt-color-highlight-blue-contrast)',
   },
   {
-    label: "Purple background",
-    value: "var(--tt-color-highlight-purple)",
-    colorValue: "#f3e8ff",
-    border: "var(--tt-color-highlight-purple-contrast)",
+    label: 'Purple background',
+    value: 'var(--tt-color-highlight-purple)',
+    colorValue: '#f3e8ff',
+    border: 'var(--tt-color-highlight-purple-contrast)',
   },
   {
-    label: "Pink background",
-    value: "var(--tt-color-highlight-pink)",
-    colorValue: "#fcf1f6",
-    border: "var(--tt-color-highlight-pink-contrast)",
+    label: 'Pink background',
+    value: 'var(--tt-color-highlight-pink)',
+    colorValue: '#fcf1f6',
+    border: 'var(--tt-color-highlight-pink-contrast)',
   },
   {
-    label: "Red background",
-    value: "var(--tt-color-highlight-red)",
-    colorValue: "#ffe4e6",
-    border: "var(--tt-color-highlight-red-contrast)",
+    label: 'Red background',
+    value: 'var(--tt-color-highlight-red)',
+    colorValue: '#ffe4e6',
+    border: 'var(--tt-color-highlight-red-contrast)',
   },
 ]
 export type HighlightColor = (typeof HIGHLIGHT_COLORS)[number]
 
-export type HighlightMode = "mark" | "node"
+export type HighlightMode = 'mark' | 'node'
 
 /**
  * Configuration for the color highlight functionality
@@ -133,9 +129,7 @@ export interface UseColorHighlightConfig {
 }
 
 export function pickHighlightColorsByValue(values: string[]) {
-  const colorMap = new Map(
-    HIGHLIGHT_COLORS.map((color) => [color.value, color])
-  )
+  const colorMap = new Map(HIGHLIGHT_COLORS.map((color) => [color.value, color]))
   return values
     .map((value) => colorMap.get(value))
     .filter((color): color is (typeof HIGHLIGHT_COLORS)[number] => !!color)
@@ -144,40 +138,28 @@ export function pickHighlightColorsByValue(values: string[]) {
 /**
  * Gets the appropriate color value based on configuration
  */
-export function getHighlightColorValue(
-  color: string,
-  useColorValue: boolean = false
-): string {
+export function getHighlightColorValue(color: string, useColorValue: boolean = false): string {
   if (!useColorValue) return color
 
-  const colorItem = HIGHLIGHT_COLORS.find(
-    (c) => c.value === color || c.colorValue === color
-  )
+  const colorItem = HIGHLIGHT_COLORS.find((c) => c.value === color || c.colorValue === color)
   return colorItem?.colorValue || color
 }
 
 /**
  * Checks if highlight can be applied based on the mode and current editor state
  */
-export function canColorHighlight(
-  editor: Editor | null,
-  mode: HighlightMode = "mark"
-): boolean {
+export function canColorHighlight(editor: Editor | null, mode: HighlightMode = 'mark'): boolean {
   if (!editor || !editor.isEditable) return false
 
-  if (mode === "mark") {
-    if (
-      !isMarkInSchema("highlight", editor) ||
-      isNodeTypeSelected(editor, ["image"])
-    )
-      return false
+  if (mode === 'mark') {
+    if (!isMarkInSchema('highlight', editor) || isNodeTypeSelected(editor, ['image'])) return false
 
-    return editor.can().setMark("highlight")
+    return editor.can().setMark('highlight')
   } else {
-    if (!isExtensionAvailable(editor, ["nodeBackground"])) return false
+    if (!isExtensionAvailable(editor, ['nodeBackground'])) return false
 
     try {
-      return editor.can().toggleNodeBackgroundColor("test")
+      return editor.can().toggleNodeBackgroundColor('test')
     } catch {
       return false
     }
@@ -190,14 +172,14 @@ export function canColorHighlight(
 export function isColorHighlightActive(
   editor: Editor | null,
   highlightColor?: string,
-  mode: HighlightMode = "mark"
+  mode: HighlightMode = 'mark'
 ): boolean {
   if (!editor || !editor.isEditable) return false
 
-  if (mode === "mark") {
+  if (mode === 'mark') {
     return highlightColor
-      ? editor.isActive("highlight", { color: highlightColor })
-      : editor.isActive("highlight")
+      ? editor.isActive('highlight', { color: highlightColor })
+      : editor.isActive('highlight')
   } else {
     if (!highlightColor) return false
 
@@ -222,15 +204,12 @@ export function isColorHighlightActive(
 /**
  * Removes highlight based on the mode
  */
-export function removeHighlight(
-  editor: Editor | null,
-  mode: HighlightMode = "mark"
-): boolean {
+export function removeHighlight(editor: Editor | null, mode: HighlightMode = 'mark'): boolean {
   if (!editor || !editor.isEditable) return false
   if (!canColorHighlight(editor, mode)) return false
 
-  if (mode === "mark") {
-    return editor.chain().focus().unsetMark("highlight").run()
+  if (mode === 'mark') {
+    return editor.chain().focus().unsetMark('highlight').run()
   } else {
     return editor.chain().focus().unsetNodeBackgroundColor().run()
   }
@@ -255,13 +234,13 @@ export function shouldShowButton(props: {
   if (!editor.isEditable) return false
 
   // hideWhenUnavailable=true: check schema/extension availability
-  if (mode === "mark") {
-    if (!isMarkInSchema("highlight", editor)) return false
+  if (mode === 'mark') {
+    if (!isMarkInSchema('highlight', editor)) return false
   } else {
-    if (!isExtensionAvailable(editor, ["nodeBackground"])) return false
+    if (!isExtensionAvailable(editor, ['nodeBackground'])) return false
   }
 
-  if (!editor.isActive("code")) {
+  if (!editor.isActive('code')) {
     return canColorHighlight(editor, mode)
   }
 
@@ -274,7 +253,7 @@ export function useColorHighlight(config: UseColorHighlightConfig) {
     label,
     highlightColor,
     hideWhenUnavailable = false,
-    mode = "mark",
+    mode = 'mark',
     useColorValue = false,
     onApplied,
   } = config
@@ -297,33 +276,26 @@ export function useColorHighlight(config: UseColorHighlightConfig) {
 
     handleSelectionUpdate()
 
-    editor.on("selectionUpdate", handleSelectionUpdate)
+    editor.on('selectionUpdate', handleSelectionUpdate)
 
     return () => {
-      editor.off("selectionUpdate", handleSelectionUpdate)
+      editor.off('selectionUpdate', handleSelectionUpdate)
     }
   }, [editor, hideWhenUnavailable, mode])
 
   const handleColorHighlight = useCallback(() => {
-    if (!editor || !canColorHighlightState || !actualColor || !label)
-      return false
+    if (!editor || !canColorHighlightState || !actualColor || !label) return false
 
-    if (mode === "mark") {
+    if (mode === 'mark') {
       if (editor.state.storedMarks) {
         const highlightMarkType = editor.schema.marks.highlight
         if (highlightMarkType) {
-          editor.view.dispatch(
-            editor.state.tr.removeStoredMark(highlightMarkType)
-          )
+          editor.view.dispatch(editor.state.tr.removeStoredMark(highlightMarkType))
         }
       }
 
       setTimeout(() => {
-        const success = editor
-          .chain()
-          .focus()
-          .toggleHighlight({ color: actualColor })
-          .run()
+        const success = editor.chain().focus().toggleHighlight({ color: actualColor }).run()
         if (success) {
           onApplied?.({ color: actualColor, label, mode })
         }
@@ -332,11 +304,7 @@ export function useColorHighlight(config: UseColorHighlightConfig) {
 
       return true
     } else {
-      const success = editor
-        .chain()
-        .focus()
-        .toggleNodeBackgroundColor(actualColor)
-        .run()
+      const success = editor.chain().focus().toggleNodeBackgroundColor(actualColor).run()
 
       if (success) {
         onApplied?.({ color: actualColor, label, mode })
@@ -348,7 +316,7 @@ export function useColorHighlight(config: UseColorHighlightConfig) {
   const handleRemoveHighlight = useCallback(() => {
     const success = removeHighlight(editor, mode)
     if (success) {
-      onApplied?.({ color: "", label: "Remove highlight", mode })
+      onApplied?.({ color: '', label: 'Remove highlight', mode })
     }
     return success
   }, [editor, onApplied, mode])

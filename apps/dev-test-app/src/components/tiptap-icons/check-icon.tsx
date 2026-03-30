@@ -1,6 +1,6 @@
-import { memo } from "react"
+import { memo } from 'react'
 
-type SvgProps = React.ComponentPropsWithoutRef<"svg">
+type SvgProps = React.ComponentPropsWithoutRef<'svg'>
 
 export const CheckIcon = memo(({ className, ...props }: SvgProps) => {
   return (
@@ -23,4 +23,4 @@ export const CheckIcon = memo(({ className, ...props }: SvgProps) => {
   )
 })
 
-CheckIcon.displayName = "CheckIcon"
+CheckIcon.displayName = 'CheckIcon'

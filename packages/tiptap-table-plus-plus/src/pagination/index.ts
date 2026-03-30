@@ -4,8 +4,8 @@ import { TableHeaderPlus } from './TableHeaderPlus'
 import { TableRowPlus } from './TableRowPlus'
 
 export const PaginationTable = {
-    TablePlus,
-    TableCellPlus,
-    TableHeaderPlus,
-    TableRowPlus
-};
+  TablePlus,
+  TableCellPlus,
+  TableHeaderPlus,
+  TableRowPlus,
+}

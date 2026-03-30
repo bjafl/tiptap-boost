@@ -26,16 +26,11 @@ export type {
   RawTuple,
   SideValues,
   StyleQuery,
-} from './types';
-export { SIDES } from './types';
+} from './types'
+export { SIDES } from './types'
 
 // ── Config ───────────────────────────────────────────────────────────────
-export {
-  STYLE_PROP_DEFS,
-  LINE_STYLE_KEYWORDS,
-  LINE_WIDTH_KEYWORDS,
-  LENGTH_RE,
-} from './config';
+export { STYLE_PROP_DEFS, LINE_STYLE_KEYWORDS, LINE_WIDTH_KEYWORDS, LENGTH_RE } from './config'
 
 // ── Utilities ────────────────────────────────────────────────────────────
 export {
@@ -47,17 +42,13 @@ export {
   isAtomicKey,
   isLineStyle,
   isLineWidth,
-} from './utils';
+} from './utils'
 
 // ── Parsing ──────────────────────────────────────────────────────────────
-export {
-  parseDeclarations,
-  parseBorderShorthand,
-  parseSideShorthand,
-} from './parse';
+export { parseDeclarations, parseBorderShorthand, parseSideShorthand } from './parse'
 
 // ── Expansion ────────────────────────────────────────────────────────────
-export { expand } from './expand';
+export { expand } from './expand'
 
 // ── Serialization & public API ───────────────────────────────────────────
 export {
@@ -67,7 +58,7 @@ export {
   getBaseStyles,
   mergeStyles,
   parseStyleMap,
-} from './serialize';
+} from './serialize'
 
 // ── Cache ────────────────────────────────────────────────────────────────
-export { StyleCache, STYLE_CACHE } from './cache';
+export { StyleCache, STYLE_CACHE } from './cache'

@@ -1,6 +1,6 @@
-import { memo } from "react"
+import { memo } from 'react'
 
-type SvgProps = React.ComponentPropsWithoutRef<"svg">
+type SvgProps = React.ComponentPropsWithoutRef<'svg'>
 
 export const HighlighterIcon = memo(({ className, ...props }: SvgProps) => {
   return (
@@ -23,4 +23,4 @@ export const HighlighterIcon = memo(({ className, ...props }: SvgProps) => {
   )
 })
 
-HighlighterIcon.displayName = "HighlighterIcon"
+HighlighterIcon.displayName = 'HighlighterIcon'

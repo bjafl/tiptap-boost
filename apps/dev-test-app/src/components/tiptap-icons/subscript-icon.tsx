@@ -1,6 +1,6 @@
-import { memo } from "react"
+import { memo } from 'react'
 
-type SvgProps = React.ComponentPropsWithoutRef<"svg">
+type SvgProps = React.ComponentPropsWithoutRef<'svg'>
 
 export const SubscriptIcon = memo(({ className, ...props }: SvgProps) => {
   return (
@@ -35,4 +35,4 @@ export const SubscriptIcon = memo(({ className, ...props }: SvgProps) => {
   )
 })
 
-SubscriptIcon.displayName = "SubscriptIcon"
+SubscriptIcon.displayName = 'SubscriptIcon'
