@@ -8,7 +8,7 @@ import { TableRowGroup } from './TableRowGroup';
 import { TableCommandExtension } from '../TableCommandExtension';
 import { TablePlusNodeView } from './TablePlusNodeView';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
-import { ReplaceStep } from 'prosemirror-transform';
+import { ReplaceStep } from '@tiptap/pm/transform';
 import {
   findParentNodeOfType,
   findParentNodeOfTypeAtPos,
