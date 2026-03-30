@@ -1,4 +1,4 @@
-import { SimpleEditor } from '@/components/tiptap-templates/simple/simple-editor';
+import { SimpleEditor } from './Editor';
 
 export default function App() {
   return <SimpleEditor />;
