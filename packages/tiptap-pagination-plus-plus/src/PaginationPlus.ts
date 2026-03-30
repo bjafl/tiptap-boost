@@ -31,7 +31,7 @@ import {
   HeaderClickEvent,
   FooterClickEvent,
 } from './types'
-import type { Node as PMNode } from 'prosemirror-model'
+import type { Node as PMNode } from '@tiptap/pm/model'
 
 export interface PaginationPlusOptions {
   pageHeight: number
