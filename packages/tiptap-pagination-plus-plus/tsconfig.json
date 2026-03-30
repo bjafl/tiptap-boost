@@ -1,15 +1,21 @@
 {
-    "compilerOptions": {
-      "target": "ES6",
-      "module": "ES6",
-      "moduleResolution": "node",
-      "strict": true,
-      "esModuleInterop": true,
-      "skipLibCheck": true,
-      "outDir": "./dist",
-      "declaration": true
-    },
-    "include": ["src/**/*.ts"],
-    "exclude": ["node_modules"]
-  }
-  
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": [
+      "ESNext",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "rootDir": "src",
+    "composite": true,
+    "outDir": "dist",
+    "declarationDir": "dist/types",
+  },
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}

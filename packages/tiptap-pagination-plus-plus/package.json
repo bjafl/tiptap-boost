@@ -1,18 +1,29 @@
 {
-  "name": "tiptap-pagination-plus",
-  "version": "3.0.5",
-  "description": "Tiptap pagination extension with advanced options like automatic page breaks, customizable layouts and more.",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "name": "@tiptap-boost/tiptap-pagination-plus-plus",
+  "version": "3.0.1",
+  "description": "Tiptap pagination extension based on tiptap-pagination-plus.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "files": [
     "dist",
     "README.md",
     "package.json"
   ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "build": "tsc",
-    "watch": "tsc-watch --onSuccess \"echo 'Build completed'\""
+    "watch": "tsc-watch --onSuccess \"echo 'Build completed'\"",
+    "clean": "rimraf dist",
+    "prebuild": "pnpm clean"
   },
   "keywords": [
     "tiptap",
@@ -26,25 +37,25 @@
     "layouts",
     "extension"
   ],
-  "author": "Romik Makavana",
+  "author": "Bjarte Lode",
   "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/bjafl/tiptap-boost/issues?labels=tiptap-pagination"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bjafl/tiptap-boost",
+    "directory": "packages/tiptap-pagination-plus-plus"
+  },
+  "peerDependencies": {
+    "@tiptap/core": "^2.0.0 || ^3.0.0",
+    "@tiptap/pm": "^2.0.0 || ^3.0.0"
+  },
   "devDependencies": {
     "@tiptap/core": "^2.26.1",
     "@tiptap/pm": "^2.26.1",
     "@types/node": "^22.15.2",
     "tsc-watch": "^6.0.4",
     "typescript": "^5.8.3"
-  },
-  "bugs": {
-    "url": "https://github.com/RomikMakavana/tiptap-pagination-plus/issues"
-  },
-  "homepage": "https://romikmakavana.me/tiptap-pagination/",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/RomikMakavana/tiptap-pagination-plus"
-  },
-  "peerDependencies": {
-    "@tiptap/core": "^2.0.0 || ^3.0.0",
-    "@tiptap/pm": "^2.0.0 || ^3.0.0"
   }
 }
