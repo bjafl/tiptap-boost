@@ -16,6 +16,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "build": "tsc",
+    "dev": "tsc-watch --onSuccess \"echo 'Build completed'\"",
     "watch": "tsc-watch --onSuccess \"echo 'Build completed'\"",
     "clean": "rimraf dist",
     "prebuild": "pnpm clean"

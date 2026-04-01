@@ -7,7 +7,6 @@
     "module": "ESNext",
     "types": ["vite/client"],
     "skipLibCheck": true,
-
     /* Bundler mode */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
@@ -15,7 +14,6 @@
     "moduleDetection": "force",
     "noEmit": true,
     "jsx": "react-jsx",
-
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,
@@ -23,11 +21,15 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
-
     "paths": {
       "@/*": ["./src/*"],
       "@tiptap-boost/pdf": ["../../packages/pdf/src/index.ts"],
-      "@tiptap-boost/tiptap-table-plus-plus": ["../../packages/tiptap-table-plus-plus/src/index.ts"]
+      "@tiptap-boost/tiptap-table-plus-plus": [
+        "../../packages/tiptap-table-plus-plus/src/index.ts"
+      ],
+      "@tiptap-boost/tiptap-pagination-plus-plus": [
+        "../../packages/tiptap-pagination-plus-plus/src/index.ts"
+      ]
     }
   },
   "include": ["src"]

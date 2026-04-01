@@ -1,2 +1,9 @@
 @import './styles/_variables.scss';
 @import './styles/_keyframe-animations.scss';
+
+body,
+html {
+  margin: 0;
+  padding: 0;
+  font-family: sans-serif;
+}

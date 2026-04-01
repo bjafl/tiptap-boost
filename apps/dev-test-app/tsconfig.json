@@ -3,9 +3,21 @@
     "paths": {
       "@/*": ["./src/*"],
       "@tiptap-boost/pdf": ["../../packages/pdf/src/index.ts"],
-      "@tiptap-boost/tiptap-table-plus-plus": ["../../packages/tiptap-table-plus-plus/src/index.ts"]
+      "@tiptap-boost/tiptap-table-plus-plus": [
+        "../../packages/tiptap-table-plus-plus/src/index.ts"
+      ],
+      "@tiptap-boost/tiptap-pagination-plus-plus": [
+        "../../packages/tiptap-pagination-plus-plus/src/index.ts"
+      ]
     }
   },
   "files": [],
-  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" }]
+  "references": [
+    {
+      "path": "./tsconfig.app.json"
+    },
+    {
+      "path": "./tsconfig.node.json"
+    }
+  ]
 }
