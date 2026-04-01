@@ -1,0 +1,248 @@
+// src/styles/pagination.scss
+
+// ============================================
+// Prefix & class name map
+// ============================================
+$prefix: 'ppp' !default; // user can override with @use ... with ($prefix: 'my')
+
+$cls: (
+  root: '#{$prefix}-with-pagination',
+  gap: '#{$prefix}-pagination-gap',
+  break: '#{$prefix}-page-break',
+  break-inner: '#{$prefix}-page-break-inner',
+  header: '#{$prefix}-page-header',
+  footer: '#{$prefix}-page-footer',
+  first-header: '#{$prefix}-first-page-header',
+  br-deco: '#{$prefix}-br-decoration',
+  page: '#{$prefix}-page',
+  page-num: '#{$prefix}-page-number',
+  page-num-plus: '#{$prefix}-page-number-plus',
+  wrapper: '#{$prefix}-document-wrapper',
+  gap-height: '#{$prefix}-gap-height',
+);
+
+@function cls($name) {
+  @return '.#{map-get($cls, $name)}';
+}
+
+// ============================================
+// Var helper — all dynamic vars under one prefix
+// ============================================
+@function v($name) {
+  @return var(--#{$prefix}-#{$name});
+}
+
+// ============================================
+// User-overridable defaults
+// ============================================
+// #{cls(root)} {
+// }
+
+// ============================================
+// Wrapper
+// ============================================
+#{cls(wrapper)} {
+  --#{$prefix}-page-gap-border-color: #000000;
+  --#{$prefix}-page-gap-border-size: 1px;
+  --#{$prefix}-page-bg: white;
+  --#{$prefix}-editor-view-bg: #252525;
+  // display: contents;
+  background-color: v(editor-view-bg);
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+}
+.dark #{cls(wrapper)} {
+  --#{$prefix}-page-gap-border-color: #ffffff;
+  --#{$prefix}-editor-view-bg: #000000;
+  --#{$prefix}-page-bg: oklch(90.606% 0.0163 64.501);
+  color: black;
+}
+// ============================================
+// Root and page counters
+// ============================================
+#{cls(root)} {
+  border: v(page-gap-border-size) solid v(page-gap-border-color);
+  padding-left: v(margin-left);
+  padding-right: v(margin-right);
+  width: v(page-width);
+  margin-top: 10px;
+  margin-bottom: 10px;
+  margin-right: auto;
+  margin-left: auto;
+  background-color: v(page-bg);
+
+  &,
+  & #{cls(first-header)} {
+    counter-reset: page-number page-number-plus 1;
+  }
+
+  // Page break
+  #{cls(break)} {
+    counter-increment: page-number page-number-plus;
+
+    &:last-child {
+      #{cls(gap)},
+      #{cls(header)} {
+        display: none;
+      }
+    }
+  }
+
+  // Page counters
+  #{cls(page-num)}::before {
+    content: counter(page-number);
+  }
+  #{cls(page-num-plus)}::before {
+    content: counter(page-number-plus);
+  }
+}
+
+// ============================================
+// Page gap
+// ============================================
+
+#{cls(gap)} {
+  border-width: v(page-gap-border-size) 0;
+  background-color: v(editor-view-bg);
+  margin-right: -2px;
+  margin-left: -2px;
+  height: v(gap-height);
+}
+
+// ============================================
+// Page
+// ============================================
+#{cls(page)} {
+  display: relative;
+  float: left;
+  clear: both;
+}
+#{cls(break)} {
+  margin: v(margin-top) 0 v(margin-bottom) 0;
+  width: calc(100% + var(--#{$prefix}-margin-left) + var(--#{$prefix}-margin-right));
+  margin-left: calc(-1 * var(--#{$prefix}-margin-left));
+  margin-right: calc(-1 * var(--#{$prefix}-margin-right));
+
+  &-inner {
+    // border-top: v(page-gap-border-size) solid v(page-gap-border-color);
+    // width: 100%;
+    // height: 100%;
+    float: left;
+    clear: both;
+    left: 0px;
+    right: 0px;
+    z-index: 2;
+    width: calc(100% + v(margin-left) + v(margin-right));
+    margin-left: calc(-1 * v(margin-left));
+    margin-right: calc(-1 * v(margin-right));
+  }
+}
+
+// ============================================
+// Header & Footer (shared + individual)
+// ============================================
+$hf-positions: (left, center, right);
+
+#{cls(root)} {
+  @each $region in (header, footer) {
+    #{cls($region)} {
+      width: 100%;
+      display: flex;
+      // padding: v(margin-top) 0 v(content-margin-top) 0;
+      // max-height: calc(v(page-height) * 0.45 - v(margin-top) - v(content-margin-top));
+      overflow: hidden;
+      cursor: pointer;
+      position: relative;
+      padding-left: v(margin-left);
+      padding-right: v(margin-right);
+    }
+
+    @each $pos in $hf-positions {
+      #{cls($region)}-#{$pos} {
+        flex: 1 1 0;
+        min-width: 0;
+        text-align: $pos;
+        // overflow: hidden;
+
+        &:empty {
+          flex: 0 0 0;
+          padding: 0;
+        }
+      }
+    }
+  }
+}
+
+// // Header-specific spacing
+// #{cls(header)} {
+//   padding: v(margin-top) 0 v(content-margin-top) 0;
+//   max-height: calc(v(page-height) * 0.45 - v(margin-top) - v(content-margin-top));
+// }
+
+// // Footer-specific spacing
+// #{cls(footer)} {
+//   padding: v(content-margin-bottom) 0 v(margin-bottom) 0;
+//   max-height: calc(v(page-height) * 0.45 - v(margin-bottom) - v(content-margin-bottom));
+// }
+
+// First page — no side margins on header
+//   #{cls(first-header)} {
+//     @each $side, $_ in $hf-sides {
+//       .#{map-get($cls, header)}-#{$side} {
+//         margin-#{$side}: 0 !important;
+//       }
+//     }
+//   }
+// }
+
+// ============================================
+// Table handling
+// ============================================
+#{cls(root)} {
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    display: contents;
+
+    > tr {
+      display: grid;
+      min-width: 100%;
+    }
+    tbody {
+      display: table;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    tbody > tr {
+      display: table-row !important;
+    }
+    tr td,
+    tr th {
+      word-break: break-all;
+    }
+  }
+
+  .table-row-group,
+  .table-plus td,
+  .table-plus th {
+    max-height: v(max-content-child-height);
+    overflow-y: auto;
+  }
+
+  .image-plus-wrapper {
+    max-height: v(max-content-child-height);
+    overflow-y: visible;
+  }
+}
+
+// ============================================
+// ProseMirror fixes
+// ============================================
+#{cls(root)} {
+  *:has(> br.ProseMirror-trailingBreak:only-child),
+  #{cls(br-deco)} {
+    display: table;
+    width: 100%;
+  }
+}
