@@ -21,7 +21,7 @@
     "dist"
   ],
   "scripts": {
-    "dev": "vite",
+    "dev": "vite build --mode lib --watch",
     "build": "vite build --mode lib",
     "prepublishOnly": "pnpm build"
   },
