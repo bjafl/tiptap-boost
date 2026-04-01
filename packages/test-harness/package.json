@@ -1,0 +1,25 @@
+{
+  "name": "@tiptap-boost/test-harness",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 3111",
+    "test:e2e": "playwright test"
+  },
+  "description": "",
+  "main": "index.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.33.0",
+  "dependencies": {
+    "@playwright/test": "^1.58.2",
+    "@tiptap-boost/tiptap-pagination-plus-plus": "workspace:*",
+    "@tiptap/core": "^3.21.0",
+    "@tiptap/starter-kit": "^3.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0"
+  }
+}
