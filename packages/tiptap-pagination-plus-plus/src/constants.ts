@@ -1,20 +1,24 @@
-import { getPageSize } from './utils'
+import type { PageDimensions } from './types'
 
-export interface PageSize {
-  pageHeight: number
-  pageWidth: number
-  marginTop: number
-  marginBottom: number
-  marginLeft: number
-  marginRight: number
-}
+const make = (
+  height: number,
+  width: number,
+  top: number,
+  bottom: number,
+  left: number,
+  right: number
+): PageDimensions => ({
+  height,
+  width,
+  margin: { top, bottom, left, right },
+})
 
-export const A4_PAGE_SIZE: PageSize = getPageSize(1123, 794, 95, 95, 76, 76)
-export const A3_PAGE_SIZE: PageSize = getPageSize(1591, 1123, 95, 95, 76, 76)
-export const A5_PAGE_SIZE: PageSize = getPageSize(794, 419, 76, 76, 57, 57)
-export const LETTER_PAGE_SIZE: PageSize = getPageSize(1060, 818, 96, 96, 96, 96)
-export const LEGAL_PAGE_SIZE: PageSize = getPageSize(1404, 818, 96, 96, 96, 96)
-export const TABLOID_PAGE_SIZE: PageSize = getPageSize(1635, 1060, 96, 96, 96, 96)
+export const A4_PAGE_SIZE = make(1123, 794, 95, 95, 76, 76)
+export const A3_PAGE_SIZE = make(1591, 1123, 95, 95, 76, 76)
+export const A5_PAGE_SIZE = make(794, 419, 76, 76, 57, 57)
+export const LETTER_PAGE_SIZE = make(1060, 818, 96, 96, 96, 96)
+export const LEGAL_PAGE_SIZE = make(1404, 818, 96, 96, 96, 96)
+export const TABLOID_PAGE_SIZE = make(1635, 1060, 96, 96, 96, 96)
 
 export const PAGE_SIZES = {
   A4: A4_PAGE_SIZE,
@@ -24,3 +28,8 @@ export const PAGE_SIZES = {
   LEGAL: LEGAL_PAGE_SIZE,
   TABLOID: TABLOID_PAGE_SIZE,
 }
+
+export const EXTENSION_NAME = 'PaginationPlus'
+export const STYLE_PREFIX = 'ppp'
+export const PAGE_COUNT_META_KEY = 'PAGE_COUNT_META_KEY'
+export const FOOTER_HEIGHT_META_KEY = 'FOOTER_HEIGHT_META_KEY'
