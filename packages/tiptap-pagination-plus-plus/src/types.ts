@@ -1,4 +1,5 @@
 import { PaginationPlus } from './PaginationPlus'
+import { CSSLength, CSSLengthValue } from './utils/CSSLength'
 
 export type PaginationPlusExtension = typeof PaginationPlus
 export type PageNumber = number
@@ -11,15 +12,15 @@ export type HeaderClickEvent = (params: { event: MouseEvent; pageNumber: PageNum
 export type FooterClickEvent = (params: { event: MouseEvent; pageNumber: PageNumber }) => void
 
 export interface Margins {
-  top: number | string
-  bottom: number | string
-  left: number | string
-  right: number | string
+  top: CSSLengthValue
+  bottom: CSSLengthValue
+  left: CSSLengthValue
+  right: CSSLengthValue
 }
 
 export interface PageSize {
-  width: number | string
-  height: number | string
+  width: CSSLengthValue
+  height: CSSLengthValue
 }
 
 export interface PageDimensions extends PageSize {
@@ -38,7 +39,7 @@ export interface PaginationPlusOptions {
   pageMargins: Margins
   footer: Partial<HeaderOrFooter>
   header: Partial<HeaderOrFooter>
-  pageGap: number
+  pageGap: CSSLengthValue
   customHeader: Record<PageNumber, HeaderOrFooter>
   customFooter: Record<PageNumber, HeaderOrFooter>
   cssClassPrefix?: string // Must match prefix in scss file

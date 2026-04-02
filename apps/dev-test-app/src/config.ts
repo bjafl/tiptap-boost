@@ -72,7 +72,6 @@ export const EDITOR_OPTIONS: UseEditorOptions = {
         left: 'Header Left - Page {page}',
         center: 'Header Center - Page {page}',
         right: 'Header Right - Page {page}',
-        margins: { top: 20, bottom: 10, left: 20, right: 20 },
       },
       footer: {
         left: 'Footer Left - Page {page}',

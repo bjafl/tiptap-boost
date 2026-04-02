@@ -1,5 +1,6 @@
 import { EditorView } from '@tiptap/pm/view'
 import { PaginationPlusStorage } from '../types'
+import { CSSLength } from './CSSLength'
 
 export function getExistingPageCount(view: EditorView, storage: PaginationPlusStorage) {
   const editorDom = view.dom
@@ -18,18 +19,20 @@ export function calculatePageCount(
 ) {
   const editorDom = view.dom
 
-  const pageHeaderHeight =
-    storage.header.margins.top +
-    storage.header.margins.bottom +
-    storage.pageMargins.top +
-    headerHeight
-  const pageFooterHeight =
-    storage.footer.margins.top +
-    storage.footer.margins.bottom +
-    storage.pageMargins.bottom +
-    footerHeight
+  const pageHeaderHeight = CSSLength.sum([
+    storage.header.margins.top,
+    storage.header.margins.bottom,
+    storage.pageMargins.top,
+    headerHeight,
+  ])
+  const pageFooterHeight = CSSLength.sum([
+    storage.footer.margins.top,
+    storage.footer.margins.bottom,
+    storage.pageMargins.bottom,
+    footerHeight,
+  ])
 
-  const pageContentAreaHeight = storage.pageSize.height - pageHeaderHeight - pageFooterHeight
+  const pageContentAreaHeight = CSSLength.parse(storage.pageSize.height).sub(pageHeaderHeight).sub(pageFooterHeight).toPx()
 
   const paginationElement = editorDom.querySelector(`[data-${storage.cssClassPrefix}-pagination]`)
   const currentPageCount = getExistingPageCount(view, storage)
@@ -45,11 +48,11 @@ export function calculatePageCount(
         return currentPageCount + addPage
       } else {
         const lpFrom = -10
-        const lpTo = -(storage.pageSize.height - 10)
+        const lpTo = -(CSSLength.parse(storage.pageSize.height).toPx() - 10)
         if (lastPageGap > lpTo && lastPageGap < lpFrom) {
           return currentPageCount
         } else if (lastPageGap < lpTo) {
-          const pageHeightOnRemove = storage.pageSize.height + storage.pageGap
+          const pageHeightOnRemove = CSSLength.sum([storage.pageSize.height, storage.pageGap]).toPx()
           const removePage = Math.floor(lastPageGap / pageHeightOnRemove)
           return currentPageCount + removePage
         } else {

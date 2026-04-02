@@ -5,6 +5,7 @@ import { createPageBreakWidget, createSpacerWidget } from './pageBreakWidget'
 import { getFirstHeaderWidget } from './firstHeaderWidget'
 import { syncCssVars } from '../utils/cssVars'
 import { BREAKS_META_KEY, CONFIG_CHANGE_META_KEY } from '../constants'
+import { CSSLength } from '../utils/CSSLength'
 
 interface PaginationPluginState {
   decorations: DecorationSet
@@ -113,11 +114,17 @@ function computeBreaks(view: EditorView, storage: PaginationPlusStorage): BreakI
 }
 
 function calcPageContentHeight(storage: PaginationPlusStorage): number {
-  const headerHeight =
-    storage.pageMargins.top + storage.header.margins.top + storage.header.margins.bottom
-  const footerHeight =
-    storage.pageMargins.bottom + storage.footer.margins.top + storage.footer.margins.bottom
-  return storage.pageSize.height - headerHeight - footerHeight
+  const headerHeight = CSSLength.sum([
+    storage.pageMargins.top,
+    storage.header.margins.top,
+    storage.header.margins.bottom,
+  ])
+  const footerHeight = CSSLength.sum([
+    storage.pageMargins.bottom,
+    storage.footer.margins.top,
+    storage.footer.margins.bottom,
+  ])
+  return CSSLength.parse(storage.pageSize.height).sub(headerHeight).sub(footerHeight).toPx()
 }
 
 function breaksEqual(a: BreakInfo[], b: BreakInfo[]): boolean {

@@ -1,5 +1,6 @@
 import { DEFAULT_STYLE_PREFIX } from '../constants'
 import { PaginationPlusStorage } from '../types'
+import { CSSLengthValue } from './CSSLength'
 
 const VAR_SUFFIX_MAP = {
   pageWidth: 'page-width',
@@ -22,7 +23,7 @@ function getVarName(varKey: VarKey, prefix: string = DEFAULT_STYLE_PREFIX): stri
   return `--${prefix}-${suffix}`
 }
 
-function extractValuesFromStorage(storage: PaginationPlusStorage): Record<VarKey, string> {
+function extractValuesFromStorage(storage: PaginationPlusStorage): Record<VarKey, CSSLengthValue> {
   const { width: pageWidth, height: pageHeight } = storage.pageSize
   const {
     top: marginTop,
@@ -34,15 +35,15 @@ function extractValuesFromStorage(storage: PaginationPlusStorage): Record<VarKey
   // const contentMarginBottom = storage.footer.margins.bottom
   // const maxContentChildHeight = pageHeight - contentMarginTop - contentMarginBottom
   return {
-    pageWidth: `${pageWidth}px`,
-    pageHeight: `${pageHeight}px`,
-    pageMarginTop: `${marginTop}px`,
-    pageMarginBottom: `${marginBottom}px`,
-    pageMarginLeft: `${marginLeft}px`,
-    pageMarginRight: `${marginRight}px`,
-    // contentMarginTop: `${contentMarginTop}px`,
-    // contentMarginBottom: `${contentMarginBottom}px`,
-    // maxContentChildHeight: `${maxContentChildHeight}px`, //TODO
+    pageWidth: pageWidth,
+    pageHeight: pageHeight,
+    pageMarginTop: marginTop,
+    pageMarginBottom: marginBottom,
+    pageMarginLeft: marginLeft,
+    pageMarginRight: marginRight,
+    // contentMarginTop: contentMarginTop,
+    // contentMarginBottom: contentMarginBottom,
+    // maxContentChildHeight: maxContentChildHeight, //TODO
   }
 }
 
@@ -52,7 +53,8 @@ export function syncCssVars(el: HTMLElement, storage: PaginationPlusStorage, key
   for (const key of toSync) {
     const varName = getVarName(key, storage.cssClassPrefix)
     if (varName && values[key] != null) {
-      el.style.setProperty(varName, values[key])
+      const value = values[key]
+      el.style.setProperty(varName, typeof value === 'number' ? `${value}px` : value)
     }
   }
 }

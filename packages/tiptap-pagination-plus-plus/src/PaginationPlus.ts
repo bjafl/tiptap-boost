@@ -14,17 +14,20 @@ import { getBreakDecoPlugin } from './pm/breakDecoPlugin'
 
 const defaultContentMargins: Margins = {
   //TODO
-  top: 90,
-  bottom: 90,
-  left: 70,
-  right: 70,
+  top: '20mm',
+  bottom: '10mm',
+  left: '20mm',
+  right: '20mm',
 }
 const defaultOptions = {
-  pageSize: { width: 789, height: 800 },
+  pageSize: { width: '210mm', height: '297mm' },
   pageGap: 50,
-  pageMargins: { top: 95, bottom: 95, left: 76, right: 76 },
-  footer: { right: '{page}', margins: defaultContentMargins },
-  header: { margins: defaultContentMargins },
+  pageMargins: { top: '25mm', bottom: '25mm', left: '25mm', right: '25mm' },
+  footer: {
+    right: '{page}',
+    margins: { top: '10mm', bottom: '20mm', left: '20mm', right: '20mm' },
+  },
+  header: { margins: { top: '20mm', bottom: '10mm', left: '20mm', right: '20mm' } },
   customHeader: {},
   customFooter: {},
   cssClassPrefix: DEFAULT_STYLE_PREFIX,

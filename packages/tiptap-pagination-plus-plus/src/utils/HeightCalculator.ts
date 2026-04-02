@@ -1,6 +1,6 @@
 import { DEFAULT_STYLE_PREFIX } from '../constants'
 import { HeaderFooterType, HeightType, PageNumber, PaginationPlusStorage } from '../types'
-
+import { CSSLength } from './CSSLength'
 export class HeightCalculatorNoStorageError extends Error {
   constructor() {
     super('No storage provided for height calculation')
@@ -81,17 +81,21 @@ export class HeightCalculator {
       throw new HeightCalculatorNoStorageError()
     }
 
-    const pageHeaderHeight =
-      this.storage.header.margins.top +
-      this.storage.header.margins.bottom +
-      this.storage.pageMargins.top +
-      headerHeight
-    const pageFooterHeight =
-      this.storage.footer.margins.top +
-      this.storage.footer.margins.bottom +
-      this.storage.pageMargins.bottom +
-      footerHeight
-    const pageHeight = this.storage.pageSize.height - pageHeaderHeight - pageFooterHeight
+    const pageHeaderHeight = CSSLength.sum([
+      this.storage.header.margins.top,
+      this.storage.header.margins.bottom,
+      this.storage.pageMargins.top,
+      headerHeight,
+    ])
+    const pageFooterHeight = CSSLength.sum([
+      this.storage.footer.margins.top,
+      this.storage.footer.margins.bottom,
+      this.storage.pageMargins.bottom,
+      footerHeight,
+    ])
+    const pageHeight = CSSLength.parse(this.storage.pageSize.height)
+      .sub(pageHeaderHeight)
+      .sub(pageFooterHeight)
     return {
       pageHeaderHeight,
       pageFooterHeight,
