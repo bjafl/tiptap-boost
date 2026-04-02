@@ -19,8 +19,6 @@ export type StylePart<K extends StyleBase> =
       ? Cap<P>
       : undefined
 
-type aaa = StylePart<'border'>
-type bbb = StylePart<'padding'>
 /**
  * Derives all atomic (fully-expanded) keys for a given base style.
  *

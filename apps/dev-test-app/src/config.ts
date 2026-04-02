@@ -58,6 +58,16 @@ export const EDITOR_OPTIONS: UseEditorOptions = {
       onError: (error) => console.error('Upload failed:', error),
     }),
     PaginationPlus.configure({
+      pageSize: {
+        height: '297mm',
+        width: '210mm',
+      },
+      pageMargins: {
+        top: '25mm',
+        bottom: '25mm',
+        left: '25mm',
+        right: '25mm',
+      },
       header: {
         left: 'Header Left - Page {page}',
         center: 'Header Center - Page {page}',

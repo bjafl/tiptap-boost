@@ -105,11 +105,13 @@ $darkModeDefaults: (
 
 #{cls(docRoot)} {
   border: v(page-border-size) solid v(page-border-color);
-  padding-left: v(margin-left);
-  padding-right: v(margin-right);
+  padding-left: v(page-margin-left);
+  padding-right: v(page-margin-right);
   width: v(page-width);
   margin-top: v(margin-top);
   margin-bottom: v(margin-bottom);
+  padding-top: v(page-margin-top);
+  padding-bottom: v(page-margin-bottom);
   margin-right: auto;
   margin-left: auto;
   background-color: v(page-bg);
@@ -140,8 +142,8 @@ $darkModeDefaults: (
 #{cls(first-header)} {
   display: block;
   width: v(page-width);
-  margin-left: calc(-1 * v(margin-left));
-  margin-right: calc(-1 * v(margin-right));
+  margin-left: calc(-1 * v(page-margin-left));
+  margin-right: calc(-1 * v(page-margin-right));
 }
 
 // Spacer fills remaining content space at the bottom of each page.
@@ -149,8 +151,8 @@ $darkModeDefaults: (
 #{cls(spacer)} {
   display: block;
   width: v(page-width);
-  margin-left: calc(-1 * v(margin-left));
-  margin-right: calc(-1 * v(margin-right));
+  margin-left: calc(-1 * v(page-margin-left));
+  margin-right: calc(-1 * v(page-margin-right));
 }
 
 // Page break contains: footer of ending page + gap + header of next page.
@@ -158,8 +160,8 @@ $darkModeDefaults: (
 #{cls(break)} {
   display: block;
   width: v(page-width);
-  margin-left: calc(-1 * v(margin-left));
-  margin-right: calc(-1 * v(margin-right));
+  margin-left: calc(-1 * v(page-margin-left));
+  margin-right: calc(-1 * v(page-margin-right));
 }
 
 // ============================================
@@ -194,31 +196,10 @@ $hf-positions: (left, center, right);
   }
 }
 
-// // Header-specific spacing
-// #{cls(header)} {
-//   padding: v(margin-top) 0 v(content-margin-top) 0;
-//   max-height: calc(v(page-height) * 0.45 - v(margin-top) - v(content-margin-top));
-// }
-
-// // Footer-specific spacing
-// #{cls(footer)} {
-//   padding: v(content-margin-bottom) 0 v(margin-bottom) 0;
-//   max-height: calc(v(page-height) * 0.45 - v(margin-bottom) - v(content-margin-bottom));
-// }
-
-// First page — no side margins on header
-//   #{cls(first-header)} {
-//     @each $side, $_ in $hf-sides {
-//       .#{map-get($cls, header)}-#{$side} {
-//         margin-#{$side}: 0 !important;
-//       }
-//     }
-//   }
-// }
-
 // ============================================
 // Table handling
 // ============================================
+
 #{cls(docRoot)} {
   table {
     border-collapse: collapse;

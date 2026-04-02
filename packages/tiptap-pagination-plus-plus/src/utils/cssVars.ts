@@ -4,22 +4,22 @@ import { PaginationPlusStorage } from '../types'
 const VAR_SUFFIX_MAP = {
   pageWidth: 'page-width',
   pageHeight: 'page-height',
-  marginTop: 'margin-top',
-  marginBottom: 'margin-bottom',
-  marginLeft: 'margin-left',
-  marginRight: 'margin-right',
-  contentMarginTop: 'content-margin-top',
-  contentMarginBottom: 'content-margin-bottom',
-  maxContentChildHeight: 'max-content-child-height',
+  pageMarginTop: 'page-margin-top',
+  pageMarginBottom: 'page-margin-bottom',
+  pageMarginLeft: 'page-margin-left',
+  pageMarginRight: 'page-margin-right',
+  // contentMarginTop: 'content-margin-top',
+  // contentMarginBottom: 'content-margin-bottom',
+  // maxContentChildHeight: 'max-content-child-height',
 } as const
 
 type VarKey = keyof typeof VAR_SUFFIX_MAP
-type VarSuffix = (typeof VAR_SUFFIX_MAP)[VarKey]
-type VarName = `--${typeof DEFAULT_STYLE_PREFIX}-${VarSuffix}`
+// type VarSuffix = (typeof VAR_SUFFIX_MAP)[VarKey]
+// type VarName = `--${string}-${VarSuffix}`
 
-function getVarName(varKey: VarKey): VarName {
+function getVarName(varKey: VarKey, prefix: string = DEFAULT_STYLE_PREFIX): string {
   const suffix = VAR_SUFFIX_MAP[varKey]
-  return `--${DEFAULT_STYLE_PREFIX}-${suffix}`
+  return `--${prefix}-${suffix}`
 }
 
 function extractValuesFromStorage(storage: PaginationPlusStorage): Record<VarKey, string> {
@@ -30,19 +30,19 @@ function extractValuesFromStorage(storage: PaginationPlusStorage): Record<VarKey
     left: marginLeft,
     right: marginRight,
   } = storage.pageMargins
-  const contentMarginTop = storage.header.margins.top
-  const contentMarginBottom = storage.footer.margins.bottom
-  const maxContentChildHeight = pageHeight - contentMarginTop - contentMarginBottom
+  // const contentMarginTop = storage.header.margins.top
+  // const contentMarginBottom = storage.footer.margins.bottom
+  // const maxContentChildHeight = pageHeight - contentMarginTop - contentMarginBottom
   return {
     pageWidth: `${pageWidth}px`,
     pageHeight: `${pageHeight}px`,
-    marginTop: `${marginTop}px`,
-    marginBottom: `${marginBottom}px`,
-    marginLeft: `${marginLeft}px`,
-    marginRight: `${marginRight}px`,
-    contentMarginTop: `${contentMarginTop}px`,
-    contentMarginBottom: `${contentMarginBottom}px`,
-    maxContentChildHeight: `${maxContentChildHeight}px`, //TODO
+    pageMarginTop: `${marginTop}px`,
+    pageMarginBottom: `${marginBottom}px`,
+    pageMarginLeft: `${marginLeft}px`,
+    pageMarginRight: `${marginRight}px`,
+    // contentMarginTop: `${contentMarginTop}px`,
+    // contentMarginBottom: `${contentMarginBottom}px`,
+    // maxContentChildHeight: `${maxContentChildHeight}px`, //TODO
   }
 }
 
@@ -50,7 +50,7 @@ export function syncCssVars(el: HTMLElement, storage: PaginationPlusStorage, key
   const toSync: VarKey[] = keys ?? (Object.keys(VAR_SUFFIX_MAP) as VarKey[])
   const values = extractValuesFromStorage(storage)
   for (const key of toSync) {
-    const varName = getVarName(key)
+    const varName = getVarName(key, storage.cssClassPrefix)
     if (varName && values[key] != null) {
       el.style.setProperty(varName, values[key])
     }

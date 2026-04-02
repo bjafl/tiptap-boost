@@ -11,15 +11,15 @@ export type HeaderClickEvent = (params: { event: MouseEvent; pageNumber: PageNum
 export type FooterClickEvent = (params: { event: MouseEvent; pageNumber: PageNumber }) => void
 
 export interface Margins {
-  top: number
-  bottom: number
-  left: number
-  right: number
+  top: number | string
+  bottom: number | string
+  left: number | string
+  right: number | string
 }
 
 export interface PageSize {
-  width: number
-  height: number
+  width: number | string
+  height: number | string
 }
 
 export interface PageDimensions extends PageSize {
