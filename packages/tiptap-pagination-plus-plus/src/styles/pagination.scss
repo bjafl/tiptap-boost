@@ -177,7 +177,10 @@ $darkModeDefaults: (
 #{cls(break)} {
   // margin: v(margin-top) 0 v(margin-bottom) 0;
   // width: calc(100% + var(--#{$prefix}-margin-left) + var(--#{$prefix}-margin-right));
-  width: 100%;
+  width: v(page-width);
+  float: left;
+  clear: both;
+  position: relative;
   // margin-left: calc(-1 * var(--#{$prefix}-margin-left));
   // margin-right: calc(-1 * var(--#{$prefix}-margin-right));
 
@@ -188,7 +191,7 @@ $darkModeDefaults: (
     width: v(page-width);
     float: left;
     clear: both;
-    z-index: 2;
+    // z-index: 2;
     position: relative;
     // width: calc(100% + v(margin-left) + v(margin-right));
     // margin-left: calc(-1 * v(margin-left));

@@ -1,5 +1,5 @@
 import { Extension } from '@tiptap/core'
-import { EXTENSION_NAME, DEFAULT_STYLE_PREFIX } from './constants'
+import { EXTENSION_NAME, DEFAULT_STYLE_PREFIX, CONFIG_CHANGE_META_KEY } from './constants'
 import {
   PageNumber,
   PageSize,
@@ -62,7 +62,14 @@ export const PaginationPlus = Extension.create<PaginationPlusOptions, Pagination
     contentEl.classList.add(
       `${this.options.cssClassPrefix ?? DEFAULT_STYLE_PREFIX}-with-pagination`
     )
+    console.log('[ppp] on create, storage and options:', {
+      storage: { ...this.storage },
+      options: { ...this.options },
+    })
     Object.assign(this.storage, this.options)
+    this.editor.view.dispatch(
+      this.editor.view.state.tr.setMeta(CONFIG_CHANGE_META_KEY, Object.keys(this.options))
+    )
     syncCssVars(contentEl, this.storage)
   },
 

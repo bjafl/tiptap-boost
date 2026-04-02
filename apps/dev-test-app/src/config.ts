@@ -15,7 +15,7 @@ import Typography from '@tiptap/extension-typography'
 import StarterKit from '@tiptap/starter-kit'
 import { ImageUploadNode } from './components/tiptap-node/image-upload-node'
 import { MAX_FILE_SIZE, handleImageUpload } from './lib/tiptap-utils'
-import { TABLE_TEST_DOC } from './testdata'
+import { LOREM_IPSUM, TABLE_TEST_DOC } from './testdata'
 import { Highlight } from '@tiptap/extension-highlight'
 import { Image } from '@tiptap/extension-image'
 import { Selection } from '@tiptap/extensions'
@@ -57,11 +57,24 @@ export const EDITOR_OPTIONS: UseEditorOptions = {
       upload: handleImageUpload,
       onError: (error) => console.error('Upload failed:', error),
     }),
-    PaginationPlus.configure({}),
+    PaginationPlus.configure({
+      header: {
+        left: 'Header Left - Page {page}',
+        center: 'Header Center - Page {page}',
+        right: 'Header Right - Page {page}',
+        margins: { top: 20, bottom: 10, left: 20, right: 20 },
+      },
+      footer: {
+        left: 'Footer Left - Page {page}',
+        center: 'Footer Center - Page {page}',
+        right: 'Footer Right - Page {page}',
+        margins: { top: 10, bottom: 20, left: 20, right: 20 },
+      },
+    }),
     TablePlus,
     TableRowPlus,
     TableCellPlus,
     TableHeaderPlus,
   ],
-  content: TABLE_TEST_DOC,
+  content: LOREM_IPSUM,
 }

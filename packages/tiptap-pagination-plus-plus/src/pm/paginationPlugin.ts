@@ -1,11 +1,11 @@
 import { EditorState, Plugin, PluginKey } from '@tiptap/pm/state'
 import { DecorationSet, EditorView } from '@tiptap/pm/view'
-import { getPageWidget } from './pageWidget'
+import { getPageBreakWidget } from './pageBreakWidget'
 import { PageNumber, PaginationPlusStorage } from '../types'
 import { getFirstHeaderWidget } from './firstHeaderWidget'
 import { syncCssVars } from '../utils/cssVars'
 import { calculatePageCount, getExistingPageCount } from '../utils/pageCount'
-import { PAGE_COUNT_META_KEY } from '../constants'
+import { CONFIG_CHANGE_META_KEY, PAGE_COUNT_META_KEY } from '../constants'
 import { HeightCalculator } from '../utils/HeightCalculator'
 
 const key = new PluginKey('pagination')
@@ -15,41 +15,30 @@ export function getPaginationPlugin(storage: PaginationPlusStorage, editorView: 
     state: {
       init: (_, state) => ({
         decorations: DecorationSet.create(state.doc, [
-          getPageWidget(storage, new Map(), new Map()),
+          getPageBreakWidget(storage, new Map(), new Map()),
           getFirstHeaderWidget(storage, new Map()),
         ]),
       }),
-      // {
-      // const widgetList = createDecoration(
-      //   this.storage,
-      //   new Map(),
-      //   new Map(),
-      //   this.storage.cssClassPrefix
-      // )
-      // this.storage = {
-      //   ...defaultOptions,
-      //   ...this.options,
-      //   footer: { margins: defaultContentMargins, ...this.options.footer },
-      //   header: { margins: defaultContentMargins, ...this.options.header },
-      //   headerHeight: new Map(),
-      //   footerHeight: new Map(),
-      // }
 
-      // return {
-      //   decorations: DecorationSet.create(state.doc, widgetList),
-      // }
-      apply: (_tr, oldDeco, _oldState, newState) => {
+      apply: (tr, oldDeco, _oldState, newState) => {
         const pageCount = calculatePageCount(editorView, storage)
         const currentPageCount = getExistingPageCount(editorView, storage)
-
-        // TODO: || storage!==options ...
-        if ((pageCount > 1 ? pageCount : 1) !== currentPageCount) {
+        console.log('[ppp] pag plugin apply', {
+          pageCount,
+          currentPageCount,
+          meta: tr.getMeta(PAGE_COUNT_META_KEY),
+          configMeta: tr.getMeta(CONFIG_CHANGE_META_KEY),
+        })
+        if (
+          (pageCount > 1 ? pageCount : 1) !== currentPageCount ||
+          tr.getMeta(CONFIG_CHANGE_META_KEY) //TODO - check if relevant keys changed ?
+        ) {
           syncCssVars(editorView.dom, storage)
           const headerHeight = 'headerHeight' in storage ? storage.headerHeight : new Map()
           const footerHeight = 'footerHeight' in storage ? storage.footerHeight : new Map()
           return {
             decorations: DecorationSet.create(newState.doc, [
-              getPageWidget(storage, headerHeight, footerHeight),
+              getPageBreakWidget(storage, headerHeight, footerHeight),
               getFirstHeaderWidget(storage, headerHeight),
             ]),
             footerHeight,
@@ -70,15 +59,6 @@ export function getPaginationPlugin(storage: PaginationPlusStorage, editorView: 
         update: (view: EditorView) => {
           const pageCount = calculatePageCount(view, storage)
           const currentPageCount = getExistingPageCount(view, storage)
-
-          // const triggerUpdate = (_footerHeight?: FooterHeightMap) => {
-          //   requestAnimationFrame(() => {
-          //     const tr = view.state.tr.setMeta(PAGE_COUNT_META_KEY, {
-          //       footerHeight: _footerHeight,
-          //     })
-          //     view.dispatch(tr)
-          //   })
-          // }
 
           if (currentPageCount !== pageCount) {
             requestAnimationFrame(() => {
