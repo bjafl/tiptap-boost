@@ -19,22 +19,25 @@ export function createPageBreakWidget(breakInfo: BreakInfo, storage: PaginationP
   return Decoration.widget(
     breakInfo.pos,
     () => {
-      const { pageNumber } = breakInfo
-      const nextPageNumber = pageNumber + 1
-
+      const { pageNumber, isLast } = breakInfo
       const footerContent = storage.customFooter[pageNumber] ?? storage.footer
-      const nextHeaderContent = storage.customHeader[nextPageNumber] ?? storage.header
 
       const prefix = storage.cssClassPrefix
       const container = document.createElement('div')
       container.classList.add(`${prefix}-page-break`)
 
       const footer = createHeaderOrFooterDiv(footerContent, storage, 'footer', pageNumber)
-      const gap = document.createElement('div')
-      gap.classList.add(`${prefix}-pagination-gap`)
-      const header = createHeaderOrFooterDiv(nextHeaderContent, storage, 'header', nextPageNumber)
+      container.append(footer)
 
-      container.append(footer, gap, header)
+      if (!isLast) {
+        const nextPageNumber = pageNumber + 1
+        const nextHeaderContent = storage.customHeader[nextPageNumber] ?? storage.header
+        const gap = document.createElement('div')
+        gap.classList.add(`${prefix}-pagination-gap`)
+        const header = createHeaderOrFooterDiv(nextHeaderContent, storage, 'header', nextPageNumber)
+        container.append(gap, header)
+      }
+
       return container
     },
     { block: true, side: -1 }

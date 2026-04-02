@@ -64,4 +64,6 @@ export interface BreakInfo {
   pos: number
   spacerHeight: number
   pageNumber: number
+  /** True for the terminal entry — renders only footer, no gap/next-header. */
+  isLast?: boolean
 }

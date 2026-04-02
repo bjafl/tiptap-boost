@@ -110,6 +110,10 @@ function computeBreaks(view: EditorView, storage: PaginationPlusStorage): BreakI
     }
   })
 
+  // Terminal entry: spacer + footer for the last page, placed at end of document.
+  const lastSpacerHeight = Math.max(0, pageContentHeight - accumulatedHeight)
+  breaks.push({ pos: doc.content.size, spacerHeight: lastSpacerHeight, pageNumber: currentPage, isLast: true })
+
   return breaks
 }
 
