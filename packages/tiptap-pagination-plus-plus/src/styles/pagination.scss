@@ -52,15 +52,12 @@ $cls: (
   docRoot: pre('with-pagination'),
   gap: pre('pagination-gap'),
   break: pre('page-break'),
-  break-inner: pre('page-break-inner'),
+  spacer: pre('page-spacer'),
   header: pre('page-header'),
   footer: pre('page-footer'),
   first-header: pre('first-page-header'),
   br-deco: pre('br-decoration'),
-  pages-wrapper: pre('pages-wrapper'),
-  page: pre('page'),
   page-num: pre('page-number'),
-  page-num-plus: pre('page-number-plus'),
 );
 
 $defaults: (
@@ -116,31 +113,6 @@ $darkModeDefaults: (
   margin-right: auto;
   margin-left: auto;
   background-color: v(page-bg);
-
-  &,
-  & #{cls(first-header)} {
-    counter-reset: page-number page-number-plus 1;
-  }
-
-  // Page break
-  #{cls(break)} {
-    counter-increment: page-number page-number-plus;
-
-    // &:last-child {
-    //   #{cls(gap)},
-    //   #{cls(header)} {
-    //     display: none;
-    //   }
-    // }
-  }
-
-  // Page counters
-  #{cls(page-num)}::before {
-    content: counter(page-number);
-  }
-  #{cls(page-num-plus)}::before {
-    content: counter(page-number-plus);
-  }
 }
 
 // ============================================
@@ -161,42 +133,33 @@ $darkModeDefaults: (
 }
 
 // ============================================
-// Page
+// Page spacer and page break (block widget decorations)
 // ============================================
-#{cls(pages-wrapper)} {
-  position: relative;
-  left: calc(-1 * v(margin-left));
-}
-#{cls(page)} {
-  position: relative;
-  width: 0; //
-  height: v(page-height); //fallback (?)
-  float: left;
-  clear: both;
-}
-#{cls(break)} {
-  // margin: v(margin-top) 0 v(margin-bottom) 0;
-  // width: calc(100% + var(--#{$prefix}-margin-left) + var(--#{$prefix}-margin-right));
-  width: v(page-width);
-  float: left;
-  clear: both;
-  position: relative;
-  // margin-left: calc(-1 * var(--#{$prefix}-margin-left));
-  // margin-right: calc(-1 * var(--#{$prefix}-margin-right));
 
-  &-inner {
-    // border-top: v(gap-border-size) solid v(gap-border-color);
-    // width: 100%;
-    // height: 100%;
-    width: v(page-width);
-    float: left;
-    clear: both;
-    // z-index: 2;
-    position: relative;
-    // width: calc(100% + v(margin-left) + v(margin-right));
-    // margin-left: calc(-1 * v(margin-left));
-    // margin-right: calc(-1 * v(margin-right));
-  }
+// First-page header: break out of editor padding so its own inline margins control position.
+#{cls(first-header)} {
+  display: block;
+  width: v(page-width);
+  margin-left: calc(-1 * v(margin-left));
+  margin-right: calc(-1 * v(margin-right));
+}
+
+// Spacer fills remaining content space at the bottom of each page.
+// Negative margins extend it to full page width so the page background shows correctly.
+#{cls(spacer)} {
+  display: block;
+  width: v(page-width);
+  margin-left: calc(-1 * v(margin-left));
+  margin-right: calc(-1 * v(margin-right));
+}
+
+// Page break contains: footer of ending page + gap + header of next page.
+// Negative margins break out of the editor's horizontal padding.
+#{cls(break)} {
+  display: block;
+  width: v(page-width);
+  margin-left: calc(-1 * v(margin-left));
+  margin-right: calc(-1 * v(margin-right));
 }
 
 // ============================================
@@ -207,15 +170,12 @@ $hf-positions: (left, center, right);
 #{cls(docRoot)} {
   @each $region in (header, footer) {
     #{cls($region)} {
-      width: 100%;
+      // padding-top/bottom/left/right are set inline per element from content margins
+      // width: 100%;
       display: flex;
-      // padding: v(margin-top) 0 v(content-margin-top) 0;
-      // max-height: calc(v(page-height) * 0.45 - v(margin-top) - v(content-margin-top));
       overflow: hidden;
       cursor: pointer;
       position: relative;
-      padding-left: v(margin-left);
-      padding-right: v(margin-right);
     }
 
     @each $pos in $hf-positions {

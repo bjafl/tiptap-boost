@@ -58,3 +58,9 @@ export interface PaginationPlusStorage extends PaginationPlusOptions {
 
 export type HeightType = 'actual' | 'content'
 export type HeaderFooterType = 'header' | 'footer'
+
+export interface BreakInfo {
+  pos: number
+  spacerHeight: number
+  pageNumber: number
+}

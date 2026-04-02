@@ -68,7 +68,6 @@ export const EDITOR_OPTIONS: UseEditorOptions = {
         left: 'Footer Left - Page {page}',
         center: 'Footer Center - Page {page}',
         right: 'Footer Right - Page {page}',
-        margins: { top: 10, bottom: 20, left: 20, right: 20 },
       },
     }),
     TablePlus,
