@@ -1,73 +1,118 @@
-// src/styles/pagination.scss
+@use 'sass:map';
 
 // ============================================
-// Prefix & class name map
+// Overridable variables
 // ============================================
-$prefix: 'ppp' !default; // user can override with @use ... with ($prefix: 'my')
+// Can be overridden with @use ... with ($prefix: 'my', ...)
+// or by setting CSS variables on the document root element
+
+$prefix: 'ttb' !default;
+$gap-height: 40px !default;
+$page-bg: white !default;
+$text-color: black !default;
+$editor-view-bg: #252525 !default;
+$margin-top: 20px !default;
+$margin-bottom: 20px !default;
+$page-border-color: black !default;
+$page-border-size: 1px !default;
+$dark-mode-editor-view-bg: black !default;
+$dark-mode-page-bg: oklch(90.606% 0.0163 64.501) !default;
+$dark-mode-text-color: black !default;
+
+// ============================================
+// Utility functions
+// ============================================
+
+// Add prefix
+@function pre($name) {
+  @return '#{$prefix}-#{$name}';
+}
+
+// Var name builder
+@function varProp($name) {
+  @return '--#{pre($name)}';
+}
+
+// Class name builder
+@function cls($name) {
+  @return '.#{map.get($cls, $name)}';
+}
+
+// Variable getter
+@function v($prop) {
+  @return var(#{varProp($prop)});
+}
+
+// ============================================
+// Class name and variable maps
+// ============================================
 
 $cls: (
-  root: '#{$prefix}-with-pagination',
-  gap: '#{$prefix}-pagination-gap',
-  break: '#{$prefix}-page-break',
-  break-inner: '#{$prefix}-page-break-inner',
-  header: '#{$prefix}-page-header',
-  footer: '#{$prefix}-page-footer',
-  first-header: '#{$prefix}-first-page-header',
-  br-deco: '#{$prefix}-br-decoration',
-  page: '#{$prefix}-page',
-  page-num: '#{$prefix}-page-number',
-  page-num-plus: '#{$prefix}-page-number-plus',
-  wrapper: '#{$prefix}-document-wrapper',
-  gap-height: '#{$prefix}-gap-height',
+  rootWrapper: pre('document-wrapper'),
+  docRoot: pre('with-pagination'),
+  gap: pre('pagination-gap'),
+  break: pre('page-break'),
+  break-inner: pre('page-break-inner'),
+  header: pre('page-header'),
+  footer: pre('page-footer'),
+  first-header: pre('first-page-header'),
+  br-deco: pre('br-decoration'),
+  pages-wrapper: pre('pages-wrapper'),
+  page: pre('page'),
+  page-num: pre('page-number'),
+  page-num-plus: pre('page-number-plus'),
 );
 
-@function cls($name) {
-  @return '.#{map-get($cls, $name)}';
-}
+$defaults: (
+  gap-height: $gap-height,
+  page-bg: $page-bg,
+  editor-view-bg: $editor-view-bg,
+  page-border-color: $page-border-color,
+  page-border-size: $page-border-size,
+  text-color: $text-color,
+  margin-top: $margin-top,
+  margin-bottom: $margin-bottom,
+);
 
-// ============================================
-// Var helper — all dynamic vars under one prefix
-// ============================================
-@function v($name) {
-  @return var(--#{$prefix}-#{$name});
-}
-
-// ============================================
-// User-overridable defaults
-// ============================================
-// #{cls(root)} {
-// }
+$darkModeDefaults: (
+  editor-view-bg: $dark-mode-editor-view-bg,
+  page-bg: $dark-mode-page-bg,
+  text-color: $dark-mode-text-color,
+);
 
 // ============================================
 // Wrapper
 // ============================================
-#{cls(wrapper)} {
-  --#{$prefix}-page-gap-border-color: #000000;
-  --#{$prefix}-page-gap-border-size: 1px;
-  --#{$prefix}-page-bg: white;
-  --#{$prefix}-editor-view-bg: #252525;
+
+#{cls(rootWrapper)} {
+  @each $prop, $val in $defaults {
+    #{varProp($prop)}: #{$val};
+  }
   // display: contents;
   background-color: v(editor-view-bg);
+  color: v(text-color);
   width: 100%;
   height: 100%;
   overflow: auto;
 }
-.dark #{cls(wrapper)} {
-  --#{$prefix}-page-gap-border-color: #ffffff;
-  --#{$prefix}-editor-view-bg: #000000;
-  --#{$prefix}-page-bg: oklch(90.606% 0.0163 64.501);
-  color: black;
+
+.dark #{cls(rootWrapper)} {
+  @each $prop, $val in $darkModeDefaults {
+    #{varProp($prop)}: #{$val};
+  }
 }
+
 // ============================================
 // Root and page counters
 // ============================================
-#{cls(root)} {
-  border: v(page-gap-border-size) solid v(page-gap-border-color);
+
+#{cls(docRoot)} {
+  border: v(page-border-size) solid v(page-border-color);
   padding-left: v(margin-left);
   padding-right: v(margin-right);
   width: v(page-width);
-  margin-top: 10px;
-  margin-bottom: 10px;
+  margin-top: v(margin-top);
+  margin-bottom: v(margin-bottom);
   margin-right: auto;
   margin-left: auto;
   background-color: v(page-bg);
@@ -81,12 +126,12 @@ $cls: (
   #{cls(break)} {
     counter-increment: page-number page-number-plus;
 
-    &:last-child {
-      #{cls(gap)},
-      #{cls(header)} {
-        display: none;
-      }
-    }
+    // &:last-child {
+    //   #{cls(gap)},
+    //   #{cls(header)} {
+    //     display: none;
+    //   }
+    // }
   }
 
   // Page counters
@@ -103,39 +148,51 @@ $cls: (
 // ============================================
 
 #{cls(gap)} {
-  border-width: v(page-gap-border-size) 0;
+  //TODO #
+  border-width: v(page-border-size) 0; // Top and bottom page borders between pages set here
+  border-color: v(page-border-color);
+  border-style: solid;
+  // #
+  width: 100%;
   background-color: v(editor-view-bg);
-  margin-right: -2px;
-  margin-left: -2px;
+  margin-right: calc(-1 * v(page-border-size));
+  margin-left: calc(-1 * v(page-border-size));
   height: v(gap-height);
 }
 
 // ============================================
 // Page
 // ============================================
+#{cls(pages-wrapper)} {
+  position: relative;
+  left: calc(-1 * v(margin-left));
+}
 #{cls(page)} {
-  display: relative;
+  position: relative;
+  width: 0; //
+  height: v(page-height); //fallback (?)
   float: left;
   clear: both;
 }
 #{cls(break)} {
-  margin: v(margin-top) 0 v(margin-bottom) 0;
-  width: calc(100% + var(--#{$prefix}-margin-left) + var(--#{$prefix}-margin-right));
-  margin-left: calc(-1 * var(--#{$prefix}-margin-left));
-  margin-right: calc(-1 * var(--#{$prefix}-margin-right));
+  // margin: v(margin-top) 0 v(margin-bottom) 0;
+  // width: calc(100% + var(--#{$prefix}-margin-left) + var(--#{$prefix}-margin-right));
+  width: 100%;
+  // margin-left: calc(-1 * var(--#{$prefix}-margin-left));
+  // margin-right: calc(-1 * var(--#{$prefix}-margin-right));
 
   &-inner {
-    // border-top: v(page-gap-border-size) solid v(page-gap-border-color);
+    // border-top: v(gap-border-size) solid v(gap-border-color);
     // width: 100%;
     // height: 100%;
+    width: v(page-width);
     float: left;
     clear: both;
-    left: 0px;
-    right: 0px;
     z-index: 2;
-    width: calc(100% + v(margin-left) + v(margin-right));
-    margin-left: calc(-1 * v(margin-left));
-    margin-right: calc(-1 * v(margin-right));
+    position: relative;
+    // width: calc(100% + v(margin-left) + v(margin-right));
+    // margin-left: calc(-1 * v(margin-left));
+    // margin-right: calc(-1 * v(margin-right));
   }
 }
 
@@ -144,7 +201,7 @@ $cls: (
 // ============================================
 $hf-positions: (left, center, right);
 
-#{cls(root)} {
+#{cls(docRoot)} {
   @each $region in (header, footer) {
     #{cls($region)} {
       width: 100%;
@@ -199,7 +256,7 @@ $hf-positions: (left, center, right);
 // ============================================
 // Table handling
 // ============================================
-#{cls(root)} {
+#{cls(docRoot)} {
   table {
     border-collapse: collapse;
     width: 100%;
@@ -239,7 +296,7 @@ $hf-positions: (left, center, right);
 // ============================================
 // ProseMirror fixes
 // ============================================
-#{cls(root)} {
+#{cls(docRoot)} {
   *:has(> br.ProseMirror-trailingBreak:only-child),
   #{cls(br-deco)} {
     display: table;

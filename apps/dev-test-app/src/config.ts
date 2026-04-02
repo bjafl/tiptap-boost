@@ -1,4 +1,4 @@
-import { PaginationPlus, PAGE_SIZES } from '@tiptap-boost/tiptap-pagination-plus-plus'
+import { PaginationPlus } from '@tiptap-boost/tiptap-pagination-plus-plus'
 import '@tiptap-boost/tiptap-pagination-plus-plus/styles/pagination.scss'
 import {
   TablePlus,

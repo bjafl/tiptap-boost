@@ -138,15 +138,12 @@ export function getPaginationPlugin(storage: PaginationPlusStorage, editorView: 
 
             const contentHeight = page === 1 ? pageHeight + pageHeaderHeight : pageHeight
             if (page === 1) {
-              pageContentHeightVariable[`${storage.cssClassPrefix}-page-content-first`] =
-                `${contentHeight}px`
+              pageContentHeightVariable['page-content-first'] = `${contentHeight}px`
             }
             if (page === missingPageNumber) {
-              pageContentHeightVariable[`${storage.cssClassPrefix}-page-content-general`] =
-                `${contentHeight}px`
+              pageContentHeightVariable['page-content-general'] = `${contentHeight}px`
             } else {
-              pageContentHeightVariable[`${storage.cssClassPrefix}-page-content-${page}`] =
-                `${contentHeight}px`
+              pageContentHeightVariable[`page-content-${page}`] = `${contentHeight}px`
             }
             if (maxContentHeight === undefined || contentHeight < maxContentHeight) {
               maxContentHeight = contentHeight
@@ -175,7 +172,7 @@ function refreshPage(targetNode: HTMLElement, storage: PaginationPlusStorage) {
   const paginationElement = targetNode.querySelector(`[data-${storage.cssClassPrefix}-pagination]`)
   if (paginationElement) {
     const lastPageBreak = paginationElement.lastElementChild?.querySelector(
-      '.breaker' //TODO
+      `.${storage.cssClassPrefix}-page-break-inner`
     ) as HTMLElement
     if (lastPageBreak) {
       const minHeight = lastPageBreak.offsetTop + lastPageBreak.offsetHeight

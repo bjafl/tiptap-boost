@@ -1,5 +1,5 @@
 import { Extension } from '@tiptap/core'
-import { EXTENSION_NAME, STYLE_PREFIX } from './constants'
+import { EXTENSION_NAME, DEFAULT_STYLE_PREFIX } from './constants'
 import {
   PageNumber,
   PageSize,
@@ -27,7 +27,7 @@ const defaultOptions = {
   header: { margins: defaultContentMargins },
   customHeader: {},
   customFooter: {},
-  cssClassPrefix: STYLE_PREFIX,
+  cssClassPrefix: DEFAULT_STYLE_PREFIX,
 } as const satisfies PaginationPlusOptions
 
 export const PaginationPlus = Extension.create<PaginationPlusOptions, PaginationPlusStorage>({
@@ -52,14 +52,16 @@ export const PaginationPlus = Extension.create<PaginationPlusOptions, Pagination
     }
 
     const wrapper = document.createElement('div')
-    wrapper.classList.add(`${STYLE_PREFIX}-document-wrapper`)
+    wrapper.classList.add(`${DEFAULT_STYLE_PREFIX}-document-wrapper`)
 
     parent.insertBefore(wrapper, contentEl)
     wrapper.appendChild(contentEl)
 
     this.storage.wrapperEl = wrapper
 
-    contentEl.classList.add(`${this.options.cssClassPrefix ?? STYLE_PREFIX}-with-pagination`)
+    contentEl.classList.add(
+      `${this.options.cssClassPrefix ?? DEFAULT_STYLE_PREFIX}-with-pagination`
+    )
     Object.assign(this.storage, this.options)
     syncCssVars(contentEl, this.storage)
   },
@@ -73,7 +75,9 @@ export const PaginationPlus = Extension.create<PaginationPlusOptions, Pagination
       wrapper.remove()
     }
 
-    contentEl.classList.remove(`${this.options.cssClassPrefix ?? STYLE_PREFIX}-with-pagination`)
+    contentEl.classList.remove(
+      `${this.options.cssClassPrefix ?? DEFAULT_STYLE_PREFIX}-with-pagination`
+    )
     clearCssVars(contentEl)
 
     this.storage.wrapperEl = undefined

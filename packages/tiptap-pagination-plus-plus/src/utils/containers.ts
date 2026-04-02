@@ -52,14 +52,15 @@ export function createPageBreakDefinition(
 
   const page = document.createElement('div')
   page.classList.add(`${prefix}-page`)
-  const marginTop = firstPage ? `calc(${pageHeaderHeight}px + ${pageHeight}px)` : pageHeight + 'px'
-  if (pageNumber) {
-    page.style.marginTop = `var(--${prefix}-page-content-${pageNumber}, ${marginTop})`
-  } else {
-    page.style.marginTop = firstPage
-      ? `var(--${prefix}-page-content-first, ${marginTop})`
-      : `var(--${prefix}-page-content-general, ${marginTop})`
-  }
+  // TODO
+  // const marginTop = firstPage ? `calc(${pageHeaderHeight}px + ${pageHeight}px)` : pageHeight + 'px'
+  // if (pageNumber) {
+  //   page.style.marginTop = `var(--${prefix}-page-content-${pageNumber}, ${marginTop})`
+  // } else {
+  //   page.style.marginTop = firstPage
+  //     ? `var(--${prefix}-page-content-first, ${marginTop})`
+  //     : `var(--${prefix}-page-content-general, ${marginTop})`
+  // }
 
   const pageBreak = document.createElement('div')
   pageBreak.classList.add(`${prefix}-page-break-inner`)

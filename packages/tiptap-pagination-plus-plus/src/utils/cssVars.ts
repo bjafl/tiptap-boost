@@ -1,4 +1,4 @@
-import { STYLE_PREFIX } from '../constants'
+import { DEFAULT_STYLE_PREFIX } from '../constants'
 import { PaginationPlusStorage } from '../types'
 
 const VAR_SUFFIX_MAP = {
@@ -15,11 +15,11 @@ const VAR_SUFFIX_MAP = {
 
 type VarKey = keyof typeof VAR_SUFFIX_MAP
 type VarSuffix = (typeof VAR_SUFFIX_MAP)[VarKey]
-type VarName = `--${typeof STYLE_PREFIX}-${VarSuffix}`
+type VarName = `--${typeof DEFAULT_STYLE_PREFIX}-${VarSuffix}`
 
 function getVarName(varKey: VarKey): VarName {
   const suffix = VAR_SUFFIX_MAP[varKey]
-  return `--${STYLE_PREFIX}-${suffix}`
+  return `--${DEFAULT_STYLE_PREFIX}-${suffix}`
 }
 
 function extractValuesFromStorage(storage: PaginationPlusStorage): Record<VarKey, string> {

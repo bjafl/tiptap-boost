@@ -1,4 +1,4 @@
-import { STYLE_PREFIX } from '../constants'
+import { DEFAULT_STYLE_PREFIX } from '../constants'
 import { HeaderFooterType, HeightType, PageNumber, PaginationPlusStorage } from '../types'
 
 export class HeightCalculatorNoStorageError extends Error {
@@ -14,7 +14,7 @@ export class HeightCalculator {
   private storage?: PaginationPlusStorage
 
   private static readonly defaultProps = {
-    cssClassPrefix: STYLE_PREFIX,
+    cssClassPrefix: DEFAULT_STYLE_PREFIX,
     heightType: 'actual',
   } as const
 
