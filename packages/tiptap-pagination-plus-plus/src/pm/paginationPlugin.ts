@@ -1,121 +1,110 @@
-import { EditorState, Plugin, PluginKey } from '@tiptap/pm/state'
-import { Decoration, DecorationSet, EditorView } from '@tiptap/pm/view'
-import type { Node as PMNode, NodeType, Attrs } from '@tiptap/pm/model'
-import { BreakInfo, PaginationPlusStorage } from '../types'
-import { createPageBreakWidget, createSpacerWidget } from './pageBreakWidget'
-import { getFirstHeaderWidget } from './firstHeaderWidget'
-import { syncCssVars } from '../utils/cssVars'
-import { BREAKS_META_KEY, CONFIG_CHANGE_META_KEY, PAGINATION_SPLIT_META_KEY } from '../constants'
+import { Plugin, PluginKey } from '@tiptap/pm/state'
+import { Decoration, DecorationSet } from '@tiptap/pm/view'
+import { Node as PMNode } from '@tiptap/pm/model'
+import type { PageDimensions } from '../types'
+import { DomColumnHeight } from '../utils/DomSizeCalculator'
 import { CSSLength } from '../utils/CSSLength'
 
-// Don't split if less than this many px remain on the page — avoids orphan slivers.
-const MIN_SPLIT_HEIGHT = 24
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-interface PaginationPluginState {
+interface PageInfo {
+  startPos: number
+  endPos: number
+  contentHeight: number
+}
+
+interface PluginState {
+  pages: PageInfo[]
+  /** True when the doc has changed and page layout needs recomputing. */
+  dirty: boolean
   decorations: DecorationSet
-  breaks: BreakInfo[]
-  // Positions where we've already applied a pagination split this cycle.
-  // If we compute the same split pos again the split didn't reduce the node
-  // height (line-boundary snap) → fall back to whole-node break.
-  appliedSplitPositions: Set<number>
 }
 
-interface SplitInfo {
-  pos: number
-  depth: number
-  typesAfter: { type: NodeType; attrs: Attrs | null }[]
-}
+// ─── Meta keys ────────────────────────────────────────────────────────────────
 
-const key = new PluginKey<PaginationPluginState>('pagination')
+const INIT_META = 'paginationInit'
+const PAGES_META = 'paginationPages'
 
-export function getPaginationPlugin(storage: PaginationPlusStorage, initView: EditorView) {
-  return new Plugin<PaginationPluginState>({
-    key,
+// ─── Plugin key (exported for potential external reads) ────────────────────────
+
+export const paginationPluginKey = new PluginKey<PluginState>('pagination')
+
+// ─── Plugin factory ───────────────────────────────────────────────────────────
+
+export function getPaginationPlugin(pageDimensions: PageDimensions): Plugin<PluginState> {
+  const maxPageContentHeight =
+    CSSLength.parse(pageDimensions.height).toPx() -
+    CSSLength.parseSum(pageDimensions.margin.top, pageDimensions.margin.bottom)
+
+  return new Plugin<PluginState>({
+    key: paginationPluginKey,
 
     state: {
-      init: (_, state) => ({
-        decorations: buildDecorations(state, storage, []),
-        breaks: [],
-        appliedSplitPositions: new Set(),
+      init: (_config, _state) => ({
+        pages: [],
+        dirty: false,
+        decorations: DecorationSet.empty,
       }),
 
-      apply: (tr, oldPluginState, _, newState) => {
-        if (tr.getMeta(CONFIG_CHANGE_META_KEY)) {
-          syncCssVars(initView.dom, storage)
+      apply: (tr, prev, _oldState, newState) => {
+        if (tr.getMeta(INIT_META)) {
+          return { ...prev, dirty: true }
         }
 
-        const newBreaks: BreakInfo[] | undefined = tr.getMeta(BREAKS_META_KEY)
-        if (newBreaks !== undefined) {
+        const newPages: PageInfo[] | undefined = tr.getMeta(PAGES_META)
+        if (newPages !== undefined) {
           return {
-            decorations: buildDecorations(newState, storage, newBreaks),
-            breaks: newBreaks,
-            appliedSplitPositions: new Set(),
+            pages: newPages,
+            dirty: false,
+            decorations: DecorationSet.create(
+              newState.doc,
+              buildDecorations(newPages, maxPageContentHeight)
+            ),
           }
         }
 
-        if (tr.docChanged) {
-          const isPaginationSplit = tr.getMeta(PAGINATION_SPLIT_META_KEY) === true
+        if (!tr.docChanged) return prev
 
-          // Carry appliedSplitPositions across pagination splits so the loop
-          // guard survives the doc change. Reset on external edits.
-          const appliedSplitPositions = isPaginationSplit
-            ? oldPluginState.appliedSplitPositions
-            : new Set<number>()
-
-          return {
-            decorations: buildDecorations(newState, storage, []),
-            breaks: [],
-            appliedSplitPositions,
-          }
+        return {
+          pages: prev.pages,
+          dirty: true,
+          decorations: prev.decorations.map(tr.mapping, tr.doc),
         }
-
-        return oldPluginState
       },
     },
 
     props: {
-      decorations(state: EditorState) {
-        return this.getState(state)?.decorations
+      decorations(state) {
+        return paginationPluginKey.getState(state)?.decorations
       },
     },
 
-    view: () => {
-      // Prevent multiple RAFs from queuing between updates.
+    view: (editorView) => {
+      // Trigger initial layout after fonts are loaded.
+      document.fonts.ready.then(() => {
+        requestAnimationFrame(() => {
+          if (!editorView.isDestroyed) {
+            editorView.dispatch(editorView.state.tr.setMeta(INIT_META, true))
+          }
+        })
+      })
+
       let pendingRaf: ReturnType<typeof requestAnimationFrame> | null = null
 
       return {
-        update: (view: EditorView) => {
+        update: (view) => {
+          const pluginState = paginationPluginKey.getState(view.state)
+          if (!pluginState?.dirty) return
           if (pendingRaf !== null) return
-
-          const pluginState = key.getState(view.state)
-          const appliedSplits = pluginState?.appliedSplitPositions ?? new Set<number>()
-
-          const { breaks: newBreaks, splits } = computeBreaksAndSplits(
-            view,
-            storage,
-            appliedSplits
-          )
-
-          if (splits.length > 0) {
-            pendingRaf = requestAnimationFrame(() => {
-              pendingRaf = null
-              if (view.isDestroyed) return
-              const tr = view.state.tr.setMeta(PAGINATION_SPLIT_META_KEY, true)
-              // Apply in reverse order so earlier positions stay valid.
-              for (const { pos, depth, typesAfter } of [...splits].reverse()) {
-                tr.split(pos, depth, typesAfter)
-              }
-              view.dispatch(tr)
-            })
-            return
-          }
-
-          if (breaksEqual(newBreaks, pluginState?.breaks ?? [])) return
 
           pendingRaf = requestAnimationFrame(() => {
             pendingRaf = null
-            if (!view.isDestroyed) {
-              view.dispatch(view.state.tr.setMeta(BREAKS_META_KEY, newBreaks))
+            if (view.isDestroyed) return
+
+            const pages = computePages(view.state.doc, view, maxPageContentHeight)
+            const current = paginationPluginKey.getState(view.state)?.pages ?? []
+            if (!pagesEqual(pages, current)) {
+              view.dispatch(view.state.tr.setMeta(PAGES_META, pages))
             }
           })
         },
@@ -124,303 +113,111 @@ export function getPaginationPlugin(storage: PaginationPlusStorage, initView: Ed
   })
 }
 
-function buildDecorations(
-  state: EditorState,
-  storage: PaginationPlusStorage,
-  breaks: BreakInfo[]
-): DecorationSet {
-  const decorations: Decoration[] = [getFirstHeaderWidget(storage)]
+// ─── Page layout computation ──────────────────────────────────────────────────
 
-  for (const breakInfo of breaks) {
-    decorations.push(createSpacerWidget(breakInfo, storage))
-    decorations.push(createPageBreakWidget(breakInfo, storage))
-  }
-
-  return DecorationSet.create(state.doc, decorations)
-}
-
-function computeBreaksAndSplits(
-  view: EditorView,
-  storage: PaginationPlusStorage,
-  appliedSplitPositions: Set<number>
-): { breaks: BreakInfo[]; splits: SplitInfo[] } {
-  const breaks: BreakInfo[] = []
-  const splits: SplitInfo[] = []
-  const doc = view.state.doc
-
-  let currentPage = 1
-  let accumulatedHeight = 0
-  const pageContentHeight = calcPageContentHeight(storage)
+function computePages(
+  doc: PMNode,
+  view: { nodeDOM(pos: number): Node | null | undefined },
+  maxPageContentHeight: number
+): PageInfo[] {
+  const pages: PageInfo[] = []
+  let pageSize = new DomColumnHeight(maxPageContentHeight)
+  let pageStartPos = 0
 
   doc.forEach((node, offset) => {
-    if (splits.length > 0) return
+    const dom = view.nodeDOM(offset)
+    if (!(dom instanceof HTMLElement)) return
 
-    const domNode = view.nodeDOM(offset)
-    if (!(domNode instanceof HTMLElement)) return
+    if (!pageSize.tryAddChild(dom)) {
+      // Node doesn't fit: close current page and start a new one.
+      pages.push({ startPos: pageStartPos, endPos: offset, contentHeight: pageSize.height })
+      pageStartPos = offset
+      pageSize = new DomColumnHeight(maxPageContentHeight)
 
-    const nodeHeight = domNode.offsetHeight
-
-    if (accumulatedHeight + nodeHeight > pageContentHeight) {
-      const remainingHeight = pageContentHeight - accumulatedHeight
-
-      if (remainingHeight >= MIN_SPLIT_HEIGHT) {
-        const split = findSplit(view, node, offset, domNode, remainingHeight, appliedSplitPositions)
-        if (split !== null) {
-          splits.push(split)
-          return
-        }
+      if (!pageSize.tryAddChild(dom)) {
+        // Node exceeds a full page height — place it alone and continue.
+        pages.push({
+          startPos: offset,
+          endPos: offset + node.nodeSize,
+          contentHeight: pageSize.height,
+        })
+        pageStartPos = offset + node.nodeSize
+        pageSize = new DomColumnHeight(maxPageContentHeight)
+        return
       }
-
-      // No split found (or already tried this pos): break before the whole node.
-      // Advance page count by however many full pages the node spans so
-      // accumulatedHeight stays correct for subsequent nodes.
-      breaks.push({
-        pos: offset,
-        spacerHeight: Math.max(0, remainingHeight),
-        pageNumber: currentPage,
-      })
-      currentPage += Math.floor(nodeHeight / pageContentHeight) + 1
-      accumulatedHeight = nodeHeight % pageContentHeight
-    } else {
-      accumulatedHeight += nodeHeight
     }
   })
 
-  if (splits.length === 0) {
-    breaks.push({
-      pos: doc.content.size,
-      spacerHeight: Math.max(0, pageContentHeight - accumulatedHeight),
-      pageNumber: currentPage,
-      isLast: true,
-    })
-  }
-
-  return { breaks, splits }
-}
-
-// ─── Split strategies ────────────────────────────────────────────────────────
-
-function findSplit(
-  view: EditorView,
-  node: PMNode,
-  offset: number,
-  domNode: HTMLElement,
-  remainingHeight: number,
-  appliedSplitPositions: Set<number>
-): SplitInfo | null {
-  const typeName = node.type.name
-
-  if (typeName === 'paragraph' || typeName === 'blockquote') {
-    return findLineBoundSplit(view, node, offset, domNode, remainingHeight, appliedSplitPositions)
-  }
-
-  if (typeName === 'table') {
-    return findTableSplit(view, node, offset, remainingHeight, appliedSplitPositions)
-  }
-
-  return null
-}
-
-/**
- * Finds the last line boundary inside `domNode` that fits within `remainingHeight`.
- *
- * Uses DOM Range / getClientRects to walk lines rather than posAtCoords so we
- * always land at a clean line start, never mid-line. This means the first half
- * will always be strictly shorter than the page, avoiding the infinite-loop
- * scenario where posAtCoords snaps to a line boundary and the split produces
- * no height change.
- */
-function findLineBoundSplit(
-  view: EditorView,
-  node: PMNode,
-  offset: number,
-  domNode: HTMLElement,
-  remainingHeight: number,
-  appliedSplitPositions: Set<number>
-): SplitInfo | null {
-  const domRect = domNode.getBoundingClientRect()
-  const pageBreakY = domRect.top + remainingHeight
-
-  // Entire node fits or break is above the node — nothing to do.
-  if (pageBreakY >= domRect.bottom || pageBreakY <= domRect.top) return null
-
-  const nodeContentStart = offset + 1
-  const nodeContentEnd = offset + node.nodeSize - 1
-
-  // Walk the inline content character by character using binary search +
-  // DOM Ranges to find the last position whose line box top < pageBreakY.
-  const splitPos = findLineSplitPos(view, nodeContentStart, nodeContentEnd, pageBreakY)
-
-  if (splitPos === null) return null
-
-  // Loop guard: if we already split at this pos it didn't help → whole-node break.
-  if (appliedSplitPositions.has(splitPos)) return null
-  appliedSplitPositions.add(splitPos)
-
-  const $pos = view.state.doc.resolve(splitPos)
-
-  // Ensure we're not at the very start or end of the innermost node's content
-  // (would produce an empty paragraph on one side of the split).
-  if ($pos.parentOffset === 0 || $pos.parentOffset === $pos.parent.content.size) return null
-
-  const typesAfter = buildTypesAfter($pos)
-  return { pos: splitPos, depth: $pos.depth, typesAfter }
-}
-
-/**
- * Binary-searches [lo, hi] for the last PM position whose line-top is
- * strictly less than pageBreakY, then binary-searches forward from there
- * to find where the NEXT line begins. Returns that next-line-start as the
- * split position so the first half ends at a clean line boundary.
- *
- * Two binary searches → O(log n) coordsAtPos calls for an n-character node.
- */
-function findLineSplitPos(
-  view: EditorView,
-  lo: number,
-  hi: number,
-  pageBreakY: number
-): number | null {
-  // Pass 1: find the rightmost position on a fitting line.
-  let fittingPos: number | null = null
-  let searchLo = lo
-  let searchHi = hi
-
-  while (searchLo <= searchHi) {
-    const mid = (searchLo + searchHi) >> 1
-    const y = posLineTop(view, mid)
-    if (y === null) { searchLo = mid + 1; continue }
-
-    if (y < pageBreakY) {
-      fittingPos = mid
-      searchLo = mid + 1
-    } else {
-      searchHi = mid - 1
-    }
-  }
-
-  if (fittingPos === null) return null
-
-  const fittingLineTop = posLineTop(view, fittingPos)
-  if (fittingLineTop === null) return null
-
-  // Pass 2: find the first position on the line AFTER fittingPos (different line-top).
-  searchLo = fittingPos + 1
-  searchHi = hi
-  let nextLineStart: number | null = null
-
-  while (searchLo <= searchHi) {
-    const mid = (searchLo + searchHi) >> 1
-    const y = posLineTop(view, mid)
-    if (y === null) { searchLo = mid + 1; continue }
-
-    if (y > fittingLineTop) {
-      nextLineStart = mid
-      searchHi = mid - 1
-    } else {
-      searchLo = mid + 1
-    }
-  }
-
-  // Prefer the next-line start (clean boundary). Fall back to fittingPos if the
-  // fitting line is the last line of the node (no next line found).
-  return nextLineStart ?? fittingPos
-}
-
-/** Returns the viewport top of the line containing `pos`, or null. */
-function posLineTop(view: EditorView, pos: number): number | null {
-  try {
-    return view.coordsAtPos(pos).top
-  } catch {
-    return null
-  }
-}
-
-/**
- * Finds a split between table rows — never mid-cell.
- * Handles both flat (table > row) and sectioned (table > tbody > row) schemas.
- */
-function findTableSplit(
-  view: EditorView,
-  tableNode: PMNode,
-  tableOffset: number,
-  remainingHeight: number,
-  appliedSplitPositions: Set<number>
-): SplitInfo | null {
-  let accumulated = 0
-  let lastFitPos: number | null = null
-  let overflowed = false
-
-  tableNode.forEach((child, childOffset) => {
-    if (overflowed) return
-    const absChildOffset = tableOffset + 1 + childOffset
-
-    if (child.type.name === 'tableRow') {
-      const h = rowHeight(view, absChildOffset)
-      if (h === null || accumulated + h > remainingHeight) { overflowed = true; return }
-      accumulated += h
-      lastFitPos = absChildOffset + child.nodeSize
-    } else {
-      child.forEach((row, rowOffset) => {
-        if (overflowed) return
-        const absRowOffset = absChildOffset + 1 + rowOffset
-        const h = rowHeight(view, absRowOffset)
-        if (h === null || accumulated + h > remainingHeight) { overflowed = true; return }
-        accumulated += h
-        lastFitPos = absRowOffset + row.nodeSize
-      })
-    }
+  // Final (last) page.
+  pages.push({
+    startPos: pageStartPos,
+    endPos: doc.content.size,
+    contentHeight: pageSize.height,
   })
 
-  if (lastFitPos === null) return null
-  if (appliedSplitPositions.has(lastFitPos)) return null
-  appliedSplitPositions.add(lastFitPos)
-
-  const $pos = view.state.doc.resolve(lastFitPos)
-  const typesAfter = buildTypesAfter($pos)
-  return { pos: lastFitPos, depth: $pos.depth, typesAfter }
+  return pages
 }
 
-function rowHeight(view: EditorView, rowOffset: number): number | null {
-  const dom = view.nodeDOM(rowOffset)
-  if (!(dom instanceof HTMLElement)) return null
-  return dom.offsetHeight
-}
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-// ─── Shared helpers ───────────────────────────────────────────────────────────
-
-/**
- * Builds the typesAfter array for tr.split(). Walking from innermost to
- * outermost preserves attrs (alignment etc.) on every split node.
- */
-function buildTypesAfter(
-  $pos: ReturnType<typeof import('@tiptap/pm/model').Node.prototype.resolve>
-): { type: NodeType; attrs: Attrs | null }[] {
-  const typesAfter: { type: NodeType; attrs: Attrs | null }[] = []
-  for (let d = $pos.depth; d > 0; d--) {
-    const ancestor = $pos.node(d)
-    typesAfter.push({ type: ancestor.type, attrs: ancestor.attrs })
-  }
-  return typesAfter
-}
-
-// ─── Utility ─────────────────────────────────────────────────────────────────
-
-function calcPageContentHeight(storage: PaginationPlusStorage): number {
-  const headerHeight = CSSLength.sum([
-    storage.pageMargins.top,
-    storage.header.margins.top,
-    storage.header.margins.bottom,
-  ])
-  const footerHeight = CSSLength.sum([
-    storage.pageMargins.bottom,
-    storage.footer.margins.top,
-    storage.footer.margins.bottom,
-  ])
-  return CSSLength.parse(storage.pageSize.height).sub(headerHeight).sub(footerHeight).toPx()
-}
-
-function breaksEqual(a: BreakInfo[], b: BreakInfo[]): boolean {
+function pagesEqual(a: PageInfo[], b: PageInfo[]): boolean {
   if (a.length !== b.length) return false
-  return a.every((brk, i) => brk.pos === b[i].pos && brk.spacerHeight === b[i].spacerHeight)
+  return a.every(
+    (p, i) => p.startPos === b[i].startPos && p.endPos === b[i].endPos && p.contentHeight === b[i].contentHeight
+  )
+}
+
+// ─── Decoration builders ──────────────────────────────────────────────────────
+
+function buildDecorations(pages: PageInfo[], maxPageContentHeight: number): Decoration[] {
+  // [firstBreakInfo sentinel, ...pages] — index 0 renders only the first-page header,
+  // indices 1..pages.length-1 render footer+gap+header, index pages.length renders only footer.
+  const sentinel = { startPos: 0, endPos: 0, contentHeight: 0 }
+  const all = [sentinel, ...pages]
+
+  return all.map((page, idx) =>
+    Decoration.widget(
+      page.endPos,
+      () => createBreakElement(page, idx, pages.length, maxPageContentHeight),
+      { side: 0 }
+    )
+  )
+}
+
+function createBreakElement(
+  page: PageInfo,
+  idx: number,
+  totalPages: number,
+  maxPageContentHeight: number
+): HTMLElement {
+  const el = document.createElement('div')
+  el.className = 'ttb-page-break'
+
+  if (idx !== 0) {
+    const remaining = maxPageContentHeight - page.contentHeight
+    const spacer = document.createElement('div')
+    spacer.className = 'ttb-page-spacer'
+    spacer.style.height = `${remaining}px`
+    el.appendChild(spacer)
+
+    const footer = document.createElement('div')
+    footer.className = 'ttb-page-footer'
+    footer.style.height = '25mm' // TODO: use storage
+    el.appendChild(footer)
+  }
+
+  if (idx !== 0 && idx !== totalPages) {
+    const gap = document.createElement('div')
+    gap.className = 'ttb-pagination-gap'
+    el.appendChild(gap)
+  }
+
+  if (idx !== totalPages) {
+    const header = document.createElement('div')
+    header.className = 'ttb-page-header'
+    header.style.height = '25mm' // TODO: use storage
+    el.appendChild(header)
+  }
+
+  return el
 }

@@ -1,6 +1,6 @@
 import { Extension } from '@tiptap/core'
 import { EXTENSION_NAME, DEFAULT_STYLE_PREFIX, CONFIG_CHANGE_META_KEY } from './constants'
-import {
+import type {
   PageNumber,
   PageSize,
   PaginationPlusOptions,
@@ -11,16 +11,7 @@ import {
 } from './types'
 import { clearCssVars, syncCssVars } from './utils/cssVars'
 import { getPaginationPlugin } from './pm/paginationPlugin'
-import { getBreakDecoPlugin } from './pm/breakDecoPlugin'
-import { getDebugPlugin } from './pm/debugPlugin'
 
-const defaultContentMargins: Margins = {
-  //TODO
-  top: '20mm',
-  bottom: '10mm',
-  left: '20mm',
-  right: '20mm',
-}
 const defaultOptions = {
   pageSize: { width: '210mm', height: '297mm' },
   pageGap: 50,
@@ -63,10 +54,6 @@ export const PaginationPlus = Extension.create<PaginationPlusOptions, Pagination
     contentEl.classList.add(
       `${this.options.cssClassPrefix ?? DEFAULT_STYLE_PREFIX}-with-pagination`
     )
-    console.log('[ppp] on create, storage and options:', {
-      storage: { ...this.storage },
-      options: { ...this.options },
-    })
     Object.assign(this.storage, this.options)
     this.editor.view.dispatch(
       this.editor.view.state.tr.setMeta(CONFIG_CHANGE_META_KEY, Object.keys(this.options))
@@ -90,15 +77,15 @@ export const PaginationPlus = Extension.create<PaginationPlusOptions, Pagination
 
     this.storage.wrapperEl = undefined
   },
+
   addProseMirrorPlugins() {
     const pageDimensions: PageDimensions = {
       ...this.storage.pageSize,
       margin: this.storage.pageMargins,
     }
-    console.log('[ppp] addProseMirrorPlugins, pageDimensions:', pageDimensions)
-    return [getDebugPlugin(pageDimensions)]
-    // return [getPaginationPlugin(this.storage, this.editor.view), getBreakDecoPlugin(this.storage)]
+    return [getPaginationPlugin(pageDimensions)]
   },
+
   addCommands() {
     return {
       updatePageSize:
