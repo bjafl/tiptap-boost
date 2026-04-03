@@ -43,6 +43,18 @@ $dark-mode-text-color: black !default;
   @return var(#{varProp($prop)});
 }
 
+// Debug ruler
+@mixin alternating-gradient($color-a, $size-a, $color-b, $size-b) {
+  $total: calc(#{$size-a} + #{$size-b});
+  background-image: repeating-linear-gradient(
+    to bottom,
+    $color-a 0,
+    $color-a $size-a,
+    $color-b $size-a,
+    $color-b $total
+  );
+}
+
 // ============================================
 // Class name and variable maps
 // ============================================
@@ -97,24 +109,37 @@ $darkModeDefaults: (
   @each $prop, $val in $darkModeDefaults {
     #{varProp($prop)}: #{$val};
   }
-}
 
-// ============================================
-// Root and page counters
-// ============================================
+  // ============================================
+  // Root and page counters
+  // ============================================
 
-#{cls(docRoot)} {
-  border: v(page-border-size) solid v(page-border-color);
-  padding-left: v(page-margin-left);
-  padding-right: v(page-margin-right);
-  width: v(page-width);
-  margin-top: v(margin-top);
-  margin-bottom: v(margin-bottom);
-  // padding-top: v(page-margin-top);
-  // padding-bottom: v(page-margin-bottom);
-  margin-right: auto;
-  margin-left: auto;
-  background-color: v(page-bg);
+  #{cls(docRoot)} {
+    border: v(page-border-size) solid v(page-border-color);
+    padding-left: v(page-margin-left);
+    padding-right: v(page-margin-right);
+    width: v(page-width);
+    margin-top: v(margin-top);
+    margin-bottom: v(margin-bottom);
+    // padding-top: v(page-margin-top);
+    // padding-bottom: v(page-margin-bottom);
+    margin-right: auto;
+    margin-left: auto;
+    background-color: v(page-bg);
+
+    //Debug ruler
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 30px;
+      pointer-events: none;
+      @include alternating-gradient(rgb(255, 0, 0), v(page-height), rgb(0, 255, 0), v(gap-height));
+      z-index: 9999;
+    }
+  }
 }
 
 // ============================================
@@ -162,6 +187,8 @@ $darkModeDefaults: (
   width: v(page-width);
   margin-left: calc(-1 * v(page-margin-left));
   margin-right: calc(-1 * v(page-margin-right));
+  // margin-top: v(page-margin-top);
+  // margin-bottom: v(page-margin-bottom);
 }
 
 // ============================================

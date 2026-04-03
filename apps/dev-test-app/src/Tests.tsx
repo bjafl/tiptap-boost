@@ -26,13 +26,13 @@ export function Tests() {
   const readPageSize = () => {
     const ext = getPaginationExtension()
     if (!ext) {
-      testLog('PaginationPlus extension not found.')
+      //testLog('PaginationPlus extension not found.')
       setPageSize(undefined)
       return
     }
-    testLog('Reading page size from extension storage:', {
-      storage: { ...ext.storage },
-    })
+    //testLog('Reading page size from extension storage:', {
+    //   storage: { ...ext.storage },
+    // })
     const size = ext.storage.pageSize
     testLog('Current page size:', { ...size })
     setPageSize(size)
@@ -45,10 +45,10 @@ export function Tests() {
 
   useEffect(() => {
     const handleTransaction = () => {
-      testLog('Editor transaction occurred, checking for page size updates...')
-      readPageSize()
-      const id = setInterval(() => readPageSize(), 1000)
-      setTimeout(() => clearInterval(id), 5000)
+      // testLog('Editor transaction occurred, checking for page size updates...')
+      // readPageSize()
+      // const id = setInterval(() => readPageSize(), 1000)
+      // setTimeout(() => clearInterval(id), 5000)
     }
     editor?.on('transaction', handleTransaction)
     return () => {

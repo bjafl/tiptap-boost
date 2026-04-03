@@ -1,32 +1,54 @@
-import { EditorState, Plugin, PluginKey } from '@tiptap/pm/state'
-import { Decoration, DecorationSet, EditorView } from '@tiptap/pm/view'
-import { BreakInfo, PageDimensions, PaginationPlusStorage } from '../types'
+import { Plugin, PluginKey } from '@tiptap/pm/state'
+import { PageDimensions } from '../types'
+import { DomColumnHeight, DomSizeCalculator } from '../utils/DomSizeCalculator'
+import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import { CSSLength } from '../utils/CSSLength'
-import { DomSizeCalculator } from '../utils/DomSizeCalculator'
-
-const INIT_META = 'dbugPluginInit'
-const key = new PluginKey('dbug')
+import { Node as PMNode } from '@tiptap/pm/model'
+interface PageInfo {
+  // Posisjoner i gjeldende doc
+  startPos: number
+  endPos: number
+  // Cached høyde
+  contentHeight: number
+}
+interface NodeRange {
+  from: number
+  to: number
+  pageNumber?: number
+}
 
 interface DebugPluginState {
-  pageDimensions: PageDimensions
+  pages: PageInfo[]
   changedRanges: { from: number; to: number }[]
 }
+
+const INIT_META = 'dbugPluginInit'
+const key = new PluginKey<DebugPluginState>('dbug')
+
 export function getDebugPlugin(pageDimensions: PageDimensions): Plugin<DebugPluginState> {
+  const maxPageContentHeight = //TODO: dynamic update on storage change
+    CSSLength.parse(pageDimensions.height).toPx() -
+    CSSLength.parseSum(pageDimensions.margin.top, pageDimensions.margin.bottom)
   return new Plugin<DebugPluginState>({
     key,
 
     state: {
       init: (config, state) => {
-        console.log('[DBUG PLUGIN] init', { config, state, pageDimensions })
-        return { pageDimensions, changedRanges: [] }
+        return { pages: [], changedRanges: [] }
       },
 
       apply: (tr, prev, oldState, newState) => {
         if (tr.getMeta(INIT_META)) {
           return { ...prev, changedRanges: [{ from: 0, to: newState.doc.content.size }] }
         }
-        if (tr.getMeta(key)?.clear) {
-          return { ...prev, changedRanges: [] }
+        // if (tr.getMeta(key)?.clear) {
+        //   return { ...prev, changedRanges: [] }
+        // }
+        if (tr.getMeta(key)?.pages) {
+          //TODO...
+          const newPgs = tr.getMeta(key).pages as PageInfo[]
+          console.log('[DBUG PLUGIN] apply, got new page infos:', newPgs)
+          return { ...prev, pages: newPgs, changedRanges: [] }
         }
         if (!tr.docChanged) {
           return prev // behold akkumulerte ranges
@@ -39,6 +61,7 @@ export function getDebugPlugin(pageDimensions: PageDimensions): Plugin<DebugPlug
         }))
 
         // Samle nye ranges fra denne tr
+        console.log('[DBUG PLUGIN] tr:', tr)
         const newRanges: { from: number; to: number }[] = []
         tr.mapping.maps.forEach((stepMap, i) => {
           stepMap.forEach((oldStart, oldEnd, newStart, newEnd) => {
@@ -54,55 +77,116 @@ export function getDebugPlugin(pageDimensions: PageDimensions): Plugin<DebugPlug
         }
       },
     },
-
+    props: {
+      decorations(state) {
+        const { pages } = key.getState(state)!
+        console.log('[DBUG PLUGIN] updating break decos', pages)
+        const decos = createBreakerDecos(pages, maxPageContentHeight)
+        return DecorationSet.create(state.doc, decos)
+      },
+    },
     view: (editorView) => {
       document.fonts.ready.then(() => {
         requestAnimationFrame(() => {
           editorView.dispatch(editorView.state.tr.setMeta(INIT_META, true))
         })
       })
+
+      // const sizeCalc = new DomSizeCalculator(editorView.dom, 'content')
+
       return {
         //PluginView
         update: (view, prevState) => {
-          const pluginState = key.getState(view.state)!
-          if (!pluginState.changedRanges.length) return
-
-          const changeDomElements: HTMLElement[] = []
-          for (const { from, to } of pluginState.changedRanges) {
-            view.state.doc.nodesBetween(from, to, (node, pos) => {
+          const { changedRanges, pages } = key.getState(view.state)!
+          if (!changedRanges.length) return
+          // const nodePositions: number[] = []
+          // view.state.doc.forEach((node, offset) => {
+          //   nodePositions.push(offset)
+          // })
+          const firstNodeChangedPos = Math.min(...changedRanges.map((r) => r.from))
+          const lastNodeChangedPos = Math.max(...changedRanges.map((r) => r.from))
+          type NodeInfo = { dom: HTMLElement; pos: number; node: PMNode }
+          const changedNodes: NodeInfo[] = []
+          const trailingNodes: NodeInfo[] = []
+          view.state.doc.nodesBetween(
+            // firstNodeChangedPos, // Todo: optimize - start from prev page break.
+            0,
+            view.state.doc.content.size,
+            (node, pos) => {
               const dom = view.nodeDOM(pos)
-              if (dom instanceof HTMLElement) {
-                changeDomElements.push(dom)
+              if (dom && dom.nodeType === Node.ELEMENT_NODE) {
+                if (pos > lastNodeChangedPos) {
+                  trailingNodes.push({ dom: dom as HTMLElement, pos, node })
+                } else {
+                  changedNodes.push({ dom: dom as HTMLElement, pos, node })
+                }
               }
-            })
+            }
+          )
+          const nodes = [...changedNodes, ...trailingNodes] //todo: optimize, stop once rest of doc doesn't need reflow
+
+          console.log('[DBUG PLUGIN] view_update, changed ranges:', {
+            firstNodeChangedPos,
+            lastNodeChangedPos,
+            changedRanges,
+            pages,
+            changedNodes,
+            trailingNodes,
+            nodes,
+            maxPageContentHeight,
+            doc: view.state.doc,
+          })
+
+          const newPageInfos: PageInfo[] = []
+          for (let i = 0; i < nodes.length; i++) {
+            const curNode = nodes[i]
+
+            const curPageInfo: PageInfo = {
+              startPos: curNode.pos,
+              endPos: -1,
+              contentHeight: 0,
+            }
+            const pageSize = new DomColumnHeight(maxPageContentHeight)
+            let endNodeIdx = i
+            while (pageSize.tryAddChild(nodes[endNodeIdx].dom)) {
+              curPageInfo.contentHeight = pageSize.height
+              curPageInfo.endPos = nodes[endNodeIdx].pos
+              endNodeIdx++
+              if (endNodeIdx >= nodes.length) {
+                break
+              }
+            }
+            if (endNodeIdx === i) {
+              // Single node exceeds page height
+              //TODO split...
+              console.warn(
+                `[DBUG PLUGIN] Node at pos ${curNode.pos} exceeds max page content height. Content will overflow`
+              )
+              curPageInfo.contentHeight = pageSize.height // overflowing height ...
+              curPageInfo.endPos = curNode.pos
+            }
+            i = endNodeIdx
+
+            console.log(
+              '[DBUG PLUGIN] determined page break at pos:',
+              curPageInfo.startPos,
+              'with content height:',
+              curPageInfo.contentHeight,
+              'ending at pos:',
+              curPageInfo.endPos
+            )
+            newPageInfos.push(curPageInfo)
           }
 
-          //DBUG: calc full doc height
-          const docContentElements: HTMLElement[] = []
-          view.state.doc.descendants((node, pos) => {
-            const dom = view.nodeDOM(pos)
-            if (dom instanceof HTMLElement) {
-              docContentElements.push(dom)
-            }
-          })
-          const sizer = new DomSizeCalculator(view.dom, 'content')
-          const sizes = docContentElements.map((el) => sizer.getRect(el, 'margin', false))
-          const totHeightSummed = sizes.reduce((sum, r) => sum + r.height, 0)
-          const totHeight = sizer.getHeight(
-            docContentElements[0],
-            docContentElements[docContentElements.length - 1],
-            true
-          )
-          console.log('[DBUG PLUGIN] view_update', {
-            changeDomElements,
-            docContentElements,
-            sizes,
-            totHeightSummed,
-            totHeight,
-          })
+          console.log('[DBUG PLUGIN] dispatching new page infos:', newPageInfos)
 
+          view.dispatch(
+            view.state.tr.setMeta(key, {
+              pages: newPageInfos,
+            })
+          )
           // Reset changed ranges after processing
-          view.dispatch(view.state.tr.setMeta(key, { clear: true }))
+          // view.dispatch(view.state.tr.setMeta(key, { clear: true }))
         },
         destroy: () => {
           console.log('[DBUG PLUGIN] view_destroy', { viewToplvl: editorView })
@@ -127,27 +211,53 @@ function mergeRanges(ranges: { from: number; to: number }[]) {
   return merged
 }
 
-function simpleTest(view: EditorView) {
-  console.log('[DBUG PLUGIN] view_update', { view })
-  const coordsOrigin = view.coordsAtPos(0)
-  const posOrigin = view.posAtCoords({ left: 0, top: 0 })
-  const state = key.getState(view.state)
-  const a4Height = CSSLength.parse(state.pageDimensions.height).toPx()
-  const posA4Height = view.posAtCoords({ left: 0, top: a4Height })
-  console.log('[DBUG PLUGIN] view_update coords', {
-    coordsOrigin,
-    posOrigin,
-    posA4Height,
-  })
-
-  const firstNodePos = 0
-  const nodeDom = view.nodeDOM(firstNodePos)
-
-  if (nodeDom && nodeDom.nodeType === Node.ELEMENT_NODE) {
-    const domEl = nodeDom as HTMLElement
-    const sizer = new DomSizeCalculator(view.dom, 'content')
-    const rectRel = sizer.getRect(domEl)
-    const rectHeight = sizer.getHeight(domEl)
-    console.log('[DBUG PLUGIN] view_update first node rect', { rectRel, rectHeight, domEl })
+function createBreakerDecos(pages: PageInfo[], maxPageContentHeight: number) {
+  const firstBreakInfo = {
+    startPos: 0,
+    endPos: 0,
+    contentHeight: 0,
   }
+  return [firstBreakInfo, ...pages].map((page, idx) =>
+    Decoration.widget(
+      page.endPos,
+      () => {
+        console.log(
+          '[DBUG PLUGIN] creating breaker deco for page starting at pos:',
+          page.startPos,
+          {
+            page,
+            maxPageContentHeight,
+            remainingHeight: maxPageContentHeight - page.contentHeight,
+          }
+        )
+        const el = document.createElement('div')
+        el.className = 'ttb-page-break'
+        if (idx !== 0) {
+          const spacer = document.createElement('div')
+          const remainingHeight = maxPageContentHeight - page.contentHeight
+          spacer.className = 'ttb-page-spacer'
+          spacer.style.height = `${remainingHeight}px`
+          el.appendChild(spacer)
+          const footer = document.createElement('div')
+          footer.className = 'ttb-page-footer'
+          footer.style.height = '25mm' //TODO
+          el.appendChild(footer)
+        }
+        if (idx !== 0 && idx !== pages.length - 1) {
+          const gap = document.createElement('div')
+          gap.className = 'ttb-pagination-gap'
+          el.appendChild(gap)
+        }
+
+        if (idx !== pages.length - 1) {
+          const nextHeader = document.createElement('div')
+          nextHeader.className = 'ttb-page-header'
+          nextHeader.style.height = '25mm' //TODO
+          el.appendChild(nextHeader)
+        }
+        return el
+      },
+      { side: 0 }
+    )
+  )
 }
