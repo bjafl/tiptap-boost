@@ -20,6 +20,7 @@ interface NodeRange {
 interface DebugPluginState {
   pages: PageInfo[]
   changedRanges: { from: number; to: number }[]
+  decorations: DecorationSet
 }
 
 const INIT_META = 'dbugPluginInit'
@@ -34,21 +35,21 @@ export function getDebugPlugin(pageDimensions: PageDimensions): Plugin<DebugPlug
 
     state: {
       init: (config, state) => {
-        return { pages: [], changedRanges: [] }
+        return { pages: [], changedRanges: [], decorations: DecorationSet.empty }
       },
 
       apply: (tr, prev, oldState, newState) => {
         if (tr.getMeta(INIT_META)) {
           return { ...prev, changedRanges: [{ from: 0, to: newState.doc.content.size }] }
         }
-        // if (tr.getMeta(key)?.clear) {
-        //   return { ...prev, changedRanges: [] }
-        // }
         if (tr.getMeta(key)?.pages) {
-          //TODO...
           const newPgs = tr.getMeta(key).pages as PageInfo[]
           console.log('[DBUG PLUGIN] apply, got new page infos:', newPgs)
-          return { ...prev, pages: newPgs, changedRanges: [] }
+          const decorations = DecorationSet.create(
+            newState.doc,
+            createBreakerDecos(newPgs, maxPageContentHeight)
+          )
+          return { pages: newPgs, changedRanges: [], decorations }
         }
         if (!tr.docChanged) {
           return prev // behold akkumulerte ranges
@@ -72,17 +73,15 @@ export function getDebugPlugin(pageDimensions: PageDimensions): Plugin<DebugPlug
         })
 
         return {
-          ...prev,
+          pages: prev.pages,
+          decorations: prev.decorations.map(tr.mapping, tr.doc),
           changedRanges: mergeRanges([...remapped, ...newRanges]),
         }
       },
     },
     props: {
       decorations(state) {
-        const { pages } = key.getState(state)!
-        console.log('[DBUG PLUGIN] updating break decos', pages)
-        const decos = createBreakerDecos(pages, maxPageContentHeight)
-        return DecorationSet.create(state.doc, decos)
+        return key.getState(state)?.decorations
       },
     },
     view: (editorView) => {
@@ -150,7 +149,6 @@ export function getDebugPlugin(pageDimensions: PageDimensions): Plugin<DebugPlug
             let endNodeIdx = i
             while (pageSize.tryAddChild(nodes[endNodeIdx].dom)) {
               curPageInfo.contentHeight = pageSize.height
-              curPageInfo.endPos = nodes[endNodeIdx].pos
               endNodeIdx++
               if (endNodeIdx >= nodes.length) {
                 break
@@ -163,9 +161,13 @@ export function getDebugPlugin(pageDimensions: PageDimensions): Plugin<DebugPlug
                 `[DBUG PLUGIN] Node at pos ${curNode.pos} exceeds max page content height. Content will overflow`
               )
               curPageInfo.contentHeight = pageSize.height // overflowing height ...
-              curPageInfo.endPos = curNode.pos
+              curPageInfo.endPos = curNode.pos + curNode.node.nodeSize
+              // i stays at i, i++ advances to next node
+            } else {
+              const lastFit = nodes[endNodeIdx - 1]
+              curPageInfo.endPos = lastFit.pos + lastFit.node.nodeSize
+              i = endNodeIdx - 1 // i++ will land on endNodeIdx (first node of next page)
             }
-            i = endNodeIdx
 
             console.log(
               '[DBUG PLUGIN] determined page break at pos:',
@@ -180,13 +182,11 @@ export function getDebugPlugin(pageDimensions: PageDimensions): Plugin<DebugPlug
 
           console.log('[DBUG PLUGIN] dispatching new page infos:', newPageInfos)
 
-          view.dispatch(
-            view.state.tr.setMeta(key, {
-              pages: newPageInfos,
-            })
-          )
-          // Reset changed ranges after processing
-          // view.dispatch(view.state.tr.setMeta(key, { clear: true }))
+          requestAnimationFrame(() => {
+            if (!view.isDestroyed) {
+              view.dispatch(view.state.tr.setMeta(key, { pages: newPageInfos }))
+            }
+          })
         },
         destroy: () => {
           console.log('[DBUG PLUGIN] view_destroy', { viewToplvl: editorView })
@@ -243,13 +243,13 @@ function createBreakerDecos(pages: PageInfo[], maxPageContentHeight: number) {
           footer.style.height = '25mm' //TODO
           el.appendChild(footer)
         }
-        if (idx !== 0 && idx !== pages.length - 1) {
+        if (idx !== 0 && idx !== pages.length) {
           const gap = document.createElement('div')
           gap.className = 'ttb-pagination-gap'
           el.appendChild(gap)
         }
 
-        if (idx !== pages.length - 1) {
+        if (idx !== pages.length) {
           const nextHeader = document.createElement('div')
           nextHeader.className = 'ttb-page-header'
           nextHeader.style.height = '25mm' //TODO
