@@ -215,7 +215,7 @@ export class DomColumnHeight {
 
   private getHeight(el: HTMLElement): { height: number; margin: { top: number; bottom: number } } {
     const style = getComputedStyle(el)
-    const height = parseFloat(style.height) || 0
+    const height = el.getBoundingClientRect().height
     const marginTop = parseFloat(style.marginTop) || 0
     const marginBottom = parseFloat(style.marginBottom) || 0
     return { height, margin: { top: marginTop, bottom: marginBottom } }
