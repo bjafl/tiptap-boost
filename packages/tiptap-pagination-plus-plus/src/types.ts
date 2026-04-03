@@ -4,8 +4,6 @@ import { CSSLength, CSSLengthValue } from './utils/CSSLength'
 export type PaginationPlusExtension = typeof PaginationPlus
 export type PageNumber = number
 
-export type HeaderHeightMap = Map<PageNumber, number>
-export type FooterHeightMap = Map<PageNumber, number>
 
 export type HeaderClickEvent = (params: { event: MouseEvent; pageNumber: PageNumber }) => void
 
@@ -50,15 +48,11 @@ export interface PaginationPlusOptions {
 export interface PaginationPlusStorage extends PaginationPlusOptions {
   footer: HeaderOrFooter & { margins: Margins }
   header: HeaderOrFooter & { margins: Margins }
-  headerHeight: HeaderHeightMap
-  footerHeight: FooterHeightMap
   cssClassPrefix: string
   outerEl?: HTMLElement
   wrapperEl?: HTMLElement
 }
 
-export type HeightType = 'actual' | 'content'
-export type HeaderFooterType = 'header' | 'footer'
 
 export interface BreakInfo {
   pos: number

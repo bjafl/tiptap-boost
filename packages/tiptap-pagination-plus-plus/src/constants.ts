@@ -31,7 +31,6 @@ export const PAGE_SIZES = {
 
 export const EXTENSION_NAME = 'PaginationPlus'
 export const DEFAULT_STYLE_PREFIX = 'ttb'
-export const PAGE_COUNT_META_KEY = 'PAGE_COUNT_META_KEY'
-export const FOOTER_HEIGHT_META_KEY = 'FOOTER_HEIGHT_META_KEY'
 export const CONFIG_CHANGE_META_KEY = 'configChanged'
 export const BREAKS_META_KEY = 'paginationBreaks'
+export const PAGINATION_SPLIT_META_KEY = 'paginationSplit'

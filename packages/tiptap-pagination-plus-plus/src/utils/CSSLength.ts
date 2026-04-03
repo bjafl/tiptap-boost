@@ -178,6 +178,10 @@ export class CSSLength {
     return cssLengths.reduce((acc, curr) => acc.add(curr, context), new CSSLength(0, 'px'))
   }
 
+  static parseSum(...lengths: (string | number)[]): number {
+    return CSSLength.sum(lengths as CSSLengthValue[]).toPx()
+  }
+
   toString(): string {
     return `${this.value}${this.unit}`
   }
