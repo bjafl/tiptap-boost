@@ -1,0 +1,679 @@
+# Pagineringsstrategi for tiptap-pagination-plus-plus
+
+## Overordnet arkitektur
+
+Paginering skjer i to faser: **måling** (DOM-basert) og **splitting** (PM-transaksjoner). Vi bruker **virtuell paginering** — PM-dokumentet er flat uten page-noder, og side-inndelingen eksisterer kun i DOM-laget via NodeView og CSS.
+
+Vi unngår destruktiv "flatten-and-resplit" (slik `prosemirror-pagination` gjør) og bruker i stedet **inkrementell splitting med korreksjon**.
+
+---
+
+## Dokumentmodell
+
+### PM doc (flat — ingen page-noder)
+
+```
+doc
+ ├─ paragraph (attrs: splitId?, splitPart?)
+ ├─ paragraph
+ ├─ table
+ ├─ paragraph
+ └─ ...
+```
+
+### DOM (visuell paginering via NodeView)
+
+```html
+<div class="editor">
+  <div class="page" style="--page-number: 1">
+    <div class="page-header">...</div>
+    <div class="page-body">
+      <p>...</p>
+      <p>...</p>
+    </div>
+    <div class="page-footer">...</div>
+  </div>
+  <div class="page" style="--page-number: 2">
+    <div class="page-header">...</div>
+    <div class="page-body">
+      <p>...</p>
+    </div>
+    <div class="page-footer">...</div>
+  </div>
+</div>
+```
+
+Side-containere, headers og footers er **ren DOM** — usynlige for PM. ProseMirror ser bare den flate listen av paragrafer og tabeller.
+
+### Fordeler
+
+- Selections, paste, undo/redo, collab fungerer uten spesialhåndtering
+- Ingen kamp mot PM som vil joine/splitte på tvers av page-wrappere
+- CSS-variabel-synking (`--page-number`, `--page-count`) for headers/footers
+- Side-tilhørighet styres av plugin-state, ikke schema-struktur
+
+### Plugin state
+
+```ts
+type PageMap = {
+  pages: Array<{
+    startPos: number // inklusiv
+    endPos: number // eksklusiv
+    pageIndex: number
+  }>
+  dirtyPages: Set<number> // sider som trenger reflow
+}
+```
+
+Mappen oppdateres etter hver splitting/fusjonering og brukes av NodeView for å plassere noder i riktig side-container.
+
+---
+
+## Hovedflyt
+
+```
+view.update()
+ │  DOM er oppdatert, vi kan måle
+ │
+ ├─ 1. Dirty-sjekk
+ │     Kun sider i dirtyPages prosesseres
+ │
+ ├─ 2. Overflow-deteksjon
+ │     scrollHeight > clientHeight på page-body?
+ │
+ ├─ 3. Finn split-punkt
+ │     Traverser innhold, akkumuler høyde
+ │     → identifiser noden som overflower
+ │
+ ├─ 4. Split (addToHistory: false)
+ │     Blokk-nivå: oppdater PageMap (flytt node til neste side)
+ │     Sub-paragraf: splitt paragrafen med binærsøk + tr.split()
+ │
+ ├─ 5. Korreksjon (neste view.update-syklus)
+ │     For mye innhold → push til neste side
+ │     For lite innhold → pull fra neste side
+ │     Fusjonering: sjekk splitId-par på samme side
+ │
+ └─ 6. Konvergens
+       Typisk 1–2 korreksjonsrunder
+```
+
+---
+
+## Nøkkelmetoder
+
+### 1. Dirty-tracking
+
+Identifiser hvilke sider som ble påvirket av en transaksjon. Kun disse sidene trenger reflow.
+
+```ts
+function markDirtyPages(tr: Transaction, pageMap: PageMap): Set<number> {
+  const dirty = new Set<number>()
+
+  tr.steps.forEach((step) => {
+    // ReplaceStep har from/to som angir berørte posisjoner
+    const map = step.getMap()
+    map.forEach((oldStart, oldEnd) => {
+      for (const page of pageMap.pages) {
+        if (oldStart < page.endPos && oldEnd > page.startPos) {
+          dirty.add(page.pageIndex)
+          // Merk også neste side — innhold kan ha blitt
+          // dyttet dit
+          if (page.pageIndex + 1 < pageMap.pages.length) {
+            dirty.add(page.pageIndex + 1)
+          }
+        }
+      }
+    })
+  })
+
+  return dirty
+}
+```
+
+### 2. Overflow-deteksjon
+
+Kjøres i `view.update()`. Sjekker kun dirty sider:
+
+```ts
+function detectOverflow(view: EditorView, pageMap: PageMap): number | null {
+  for (const pageIndex of pageMap.dirtyPages) {
+    const bodyEl = getPageBodyElement(view, pageIndex)
+    if (bodyEl.scrollHeight > bodyEl.clientHeight) {
+      return pageIndex
+    }
+  }
+  return null
+}
+```
+
+### 3. Høydemåling og finn overflow-node
+
+Traverserer blokk-noder i en side og akkumulerer høyde:
+
+```ts
+type OverflowResult = {
+  nodePos: number
+  nodeType: 'paragraph' | 'table' | 'other'
+  remainingHeight: number // plass igjen før overflow
+}
+
+function findOverflowNode(
+  view: EditorView,
+  page: { startPos: number; endPos: number }
+): OverflowResult | null {
+  const bodyEl = getPageBodyElement(view, page.pageIndex)
+  const maxHeight = bodyEl.clientHeight
+  let accumulated = 0
+  let result: OverflowResult | null = null
+
+  view.state.doc.nodesBetween(page.startPos, page.endPos, (node, pos) => {
+    if (result) return false
+    if (!node.isBlock) return
+
+    const dom = view.nodeDOM(pos) as HTMLElement
+    if (!dom) return
+
+    const height = dom.getBoundingClientRect().height
+    accumulated += height
+
+    if (accumulated > maxHeight) {
+      result = {
+        nodePos: pos,
+        nodeType: node.type.name as any,
+        remainingHeight: maxHeight - (accumulated - height),
+      }
+      return false
+    }
+  })
+
+  return result
+}
+```
+
+### 4. Blokk-nivå splitting
+
+Når en hel blokk-node ikke passer, oppdaterer vi PageMap slik at noden tilhører neste side. NodeView reparenter DOM-elementet.
+
+```ts
+function splitAtBlock(pageMap: PageMap, overflowPageIndex: number, nodePos: number): PageMap {
+  const page = pageMap.pages[overflowPageIndex]
+  const updatedPage = { ...page, endPos: nodePos }
+
+  const nextPage = pageMap.pages[overflowPageIndex + 1]
+  if (nextPage) {
+    nextPage.startPos = nodePos
+  } else {
+    pageMap.pages.push({
+      startPos: nodePos,
+      endPos: page.endPos,
+      pageIndex: overflowPageIndex + 1,
+    })
+  }
+
+  pageMap.pages[overflowPageIndex] = updatedPage
+  return pageMap
+}
+```
+
+### 5. Sub-paragraf splitting
+
+Når en paragraf overflower midt i teksten. Bruker binærsøk i DOM for å finne nøyaktig split-punkt, og `tr.split()` for å dele PM-noden.
+
+Denne metoden håndterer mixed fonts, emoji, inline-noder og vilkårlig formatering korrekt fordi vi måler det _rendrede_ resultatet via `Range.getBoundingClientRect()` — vi beregner aldri tegnbredder selv.
+
+```ts
+function splitParagraph(
+  view: EditorView,
+  parPos: number,
+  remainingHeight: number
+): Transaction | null {
+  const { state } = view
+  const { tr } = state
+  const parNode = state.doc.nodeAt(parPos)
+
+  // ── Guard: plass til minst 2 linjer (orphan-kontroll) ──
+  const parDOM = view.nodeDOM(parPos) as HTMLElement
+  const lineHeight = parseFloat(getComputedStyle(parDOM).lineHeight)
+  if (remainingHeight < lineHeight * 2) return null // flytt hel paragraf
+
+  // ── Finn DOM-grense ──
+  const parRect = parDOM.getBoundingClientRect()
+  const maxY = parRect.top + remainingHeight
+
+  // ── TreeWalker over tekstnoder ──
+  const walker = document.createTreeWalker(parDOM, NodeFilter.SHOW_TEXT)
+  let splitTextNode: Text | null = null
+  let splitCharOffset = 0
+
+  while (walker.nextNode()) {
+    const textNode = walker.currentNode as Text
+    if (textNode.length === 0) continue
+
+    const range = document.createRange()
+    range.setStart(textNode, 0)
+    range.setEnd(textNode, textNode.length)
+    const textRect = range.getBoundingClientRect()
+
+    // Helt over grensen — hopp over
+    if (textRect.bottom <= maxY) continue
+
+    // Helt under grensen — splitt FØR denne noden
+    if (textRect.top >= maxY) {
+      splitTextNode = textNode
+      splitCharOffset = 0
+      break
+    }
+
+    // ── Binærsøk i tekstnoden ──
+    //    O(log n) getBoundingClientRect-kall
+    let lo = 0
+    let hi = textNode.length
+
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1
+      range.setStart(textNode, 0)
+      range.setEnd(textNode, mid)
+
+      if (range.getBoundingClientRect().bottom <= maxY) {
+        lo = mid + 1
+      } else {
+        hi = mid
+      }
+    }
+
+    splitTextNode = textNode
+    splitCharOffset = lo
+    break
+  }
+
+  if (!splitTextNode) return null
+
+  // ── Juster til ordgrense ──
+  const text = splitTextNode.textContent!
+  let adjusted = splitCharOffset
+  while (adjusted > 0 && text[adjusted - 1] !== ' ') {
+    adjusted--
+  }
+  if (adjusted === 0) adjusted = splitCharOffset // tvungen split
+
+  // ── Widow-kontroll ──
+  //    Sjekk at tail-delen får minst 2 linjer
+  //    Hvis ikke, ta med én ekstra linje fra head
+  const totalLines = Math.round(parDOM.getBoundingClientRect().height / lineHeight)
+  const headLines = Math.round(remainingHeight / lineHeight)
+  const tailLines = totalLines - headLines
+  if (tailLines < 2 && headLines > 2) {
+    // Flytt én linje opp til tail ved å justere maxY
+    // og kjøre binærsøket på nytt med redusert remainingHeight
+    return splitParagraph(view, parPos, remainingHeight - lineHeight)
+  }
+
+  // ── Map til PM-posisjon ──
+  const pmPos = view.posAtDOM(splitTextNode, adjusted)
+
+  // ── Splitt PM-noden (usynlig for undo) ──
+  tr.split(pmPos)
+  tr.setMeta('addToHistory', false)
+
+  // ── Merk begge deler med splitId ──
+  const splitId = crypto.randomUUID()
+  const headPos = parPos
+  const tailPos = tr.mapping.map(pmPos) + 1
+
+  tr.setNodeMarkup(headPos, null, {
+    ...parNode.attrs,
+    splitId,
+    splitPart: 'head',
+  })
+
+  tr.setNodeMarkup(tailPos, null, {
+    ...parNode.attrs,
+    splitId,
+    splitPart: 'tail',
+  })
+
+  return tr
+}
+```
+
+### 6. Multi-page paragraf
+
+En enkelt paragraf kan være lengre enn én hel side. Etter initial splitting kaller vi `splitDocument` rekursivt — tail-delen overflower igjen og splittes på nytt. Merkingen utvides til en kjede:
+
+```ts
+// Når en 'tail' splittes videre:
+// Eksisterende tail → mid, ny split → tail
+
+function promoteTailToMid(tr: Transaction, existingTailPos: number): Transaction {
+  const node = tr.doc.nodeAt(existingTailPos)!
+  tr.setNodeMarkup(existingTailPos, null, {
+    ...node.attrs,
+    splitPart: 'mid',
+  })
+  return tr
+}
+```
+
+Resultat over 4 sider:
+
+```
+Side 1:  { splitId: "abc", splitPart: "head" }
+Side 2:  { splitId: "abc", splitPart: "mid"  }
+Side 3:  { splitId: "abc", splitPart: "mid"  }
+Side 4:  { splitId: "abc", splitPart: "tail" }
+```
+
+### 7. Fusjonering
+
+Finner og joiner splittede noder som havnet på samme side etter reflow:
+
+```ts
+function findFusionPairs(doc: Node, pageMap: PageMap): Array<{ headPos: number; tailPos: number }> {
+  const pairs: Array<{ headPos: number; tailPos: number }> = []
+  const heads = new Map<string, { pos: number; pageIndex: number }>()
+
+  doc.descendants((node, pos) => {
+    if (!node.attrs.splitId) return
+
+    const pageIndex = pageMap.pages.findIndex((p) => pos >= p.startPos && pos < p.endPos)
+
+    if (node.attrs.splitPart === 'head' || node.attrs.splitPart === 'mid') {
+      heads.set(`${node.attrs.splitId}:${pos}`, { pos, pageIndex })
+    }
+
+    if (node.attrs.splitPart === 'tail' || node.attrs.splitPart === 'mid') {
+      // Finn forrige del med samme splitId på samme side
+      for (const [key, head] of heads) {
+        if (
+          key.startsWith(node.attrs.splitId) &&
+          head.pageIndex === pageIndex &&
+          head.pos !== pos
+        ) {
+          pairs.push({ headPos: head.pos, tailPos: pos })
+          break
+        }
+      }
+    }
+  })
+
+  return pairs
+}
+
+function fusePair(tr: Transaction, headPos: number, tailPos: number): Transaction {
+  const headNode = tr.doc.nodeAt(headPos)!
+  const joinPos = headPos + headNode.nodeSize
+
+  tr.join(joinPos)
+  tr.setMeta('addToHistory', false)
+
+  // Rydd opp attrs — sjekk om det finnes
+  // flere deler med samme splitId
+  const fusedNode = tr.doc.nodeAt(headPos)!
+  const hasMoreParts = nodeHasMoreSplitParts(tr.doc, fusedNode.attrs.splitId, headPos)
+
+  if (!hasMoreParts) {
+    tr.setNodeMarkup(headPos, null, {
+      ...fusedNode.attrs,
+      splitId: null,
+      splitPart: null,
+    })
+  }
+
+  return tr
+}
+```
+
+### 8. Tabellsplitting med rowspan-sikkerhet
+
+Tabeller splittes på rad-grense, men aldri gjennom en celle som spenner over flere rader (`rowspan`). Bruker `TableMap` for å finne trygge split-punkter.
+
+```ts
+function findSafeTableSplitRow(
+  view: EditorView,
+  tablePos: number,
+  tableNode: Node,
+  remainingHeight: number
+): number | null {
+  const tableMap = TableMap.get(tableNode)
+  const tableDOM = view.nodeDOM(tablePos) as HTMLElement
+  const rows = tableDOM.querySelectorAll('tr')
+
+  // ── Bygg set av utrygge rader ──
+  //    En rad er utrygg hvis en celle med rowspan
+  //    krysser denne radgrensen
+  const unsafeRows = new Set<number>()
+
+  for (let row = 0; row < tableMap.height; row++) {
+    for (let col = 0; col < tableMap.width; col++) {
+      const cellPos = tableMap.map[row * tableMap.width + col]
+      const rect = tableMap.findCell(cellPos)
+
+      if (rect.bottom > rect.top + 1) {
+        // Cellen spenner over flere rader —
+        // alle rader unntatt den siste er utrygge
+        for (let r = rect.top + 1; r < rect.bottom; r++) {
+          unsafeRows.add(r)
+        }
+      }
+    }
+  }
+
+  // ── Finn første trygge rad som overflower ──
+  let accumulated = 0
+
+  for (let i = 0; i < rows.length; i++) {
+    accumulated += rows[i].getBoundingClientRect().height
+
+    if (accumulated > remainingHeight) {
+      // Søk bakover til nærmeste trygge rad
+      for (let safe = i; safe >= 1; safe--) {
+        if (!unsafeRows.has(safe)) {
+          return safe
+        }
+      }
+      // Ingen trygg rad funnet — flytt hele tabellen
+      return null
+    }
+  }
+
+  return null // tabellen passer
+}
+```
+
+Nøstede tabeller (tabell inni celle) håndteres ved rekursiv høydemåling — den ytre tabellens radhøyde inkluderer allerede den indre tabellens rendrede høyde via `getBoundingClientRect()`.
+
+### 9. Pull/push-korreksjon
+
+Etter splitting kan en side ha for lite eller for mye innhold:
+
+```ts
+function correctPageFill(
+  view: EditorView,
+  pageMap: PageMap,
+  pageIndex: number
+): 'overflow' | 'underflow' | 'ok' {
+  const bodyEl = getPageBodyElement(view, pageIndex)
+  const nextPage = pageMap.pages[pageIndex + 1]
+
+  if (bodyEl.scrollHeight > bodyEl.clientHeight) {
+    return 'overflow' // push siste blokk til neste side
+  }
+
+  if (nextPage) {
+    const availableSpace = bodyEl.clientHeight - bodyEl.scrollHeight
+    const firstNodePos = nextPage.startPos
+    const firstNodeDOM = view.nodeDOM(firstNodePos) as HTMLElement
+    const firstNodeHeight = firstNodeDOM?.getBoundingClientRect().height ?? Infinity
+
+    if (firstNodeHeight <= availableSpace) {
+      return 'underflow' // pull første node fra neste side
+    }
+  }
+
+  return 'ok'
+}
+```
+
+Kjøres iterativt til alle sider returnerer `'ok'` eller maks iterasjoner er nådd.
+
+### 10. Paste-håndtering
+
+Stor paste kan trigge mange sider med splitting. Vi håndterer dette som en batch-operasjon i stedet for iterativt over mange view-update-sykluser:
+
+```ts
+function handlePaste(view: EditorView, tr: Transaction, pageMap: PageMap): Transaction {
+  // Finn hvilken side paste-punktet er på
+  const pastePageIndex = pageMap.pages.findIndex(
+    (p) => tr.selection.from >= p.startPos && tr.selection.from < p.endPos
+  )
+
+  // Batch: splitt alle sider fra paste-punkt og nedover
+  // i én enkelt transaksjon
+  let currentTr = tr
+  let safety = 0
+  const MAX_ITERATIONS = 50
+
+  while (safety++ < MAX_ITERATIONS) {
+    const overflow = findOverflowNode(view /* ... */)
+    if (!overflow) break
+
+    if (overflow.nodeType === 'paragraph') {
+      const result = splitParagraph(view, overflow.nodePos, overflow.remainingHeight)
+      if (result) currentTr = result
+    } else {
+      // Blokk-splitting
+      splitAtBlock(pageMap, pastePageIndex + safety, overflow.nodePos)
+    }
+  }
+
+  currentTr.setMeta('addToHistory', false)
+  return currentTr
+}
+```
+
+---
+
+## Undo/Redo-interaksjon
+
+Alle split/fuse-transaksjoner merkes med `addToHistory: false`. Dette gjør dem usynlige for brukeren — Ctrl+Z angrer kun brukerens egne endringer, ikke pagineringslogikkens omstrukturering.
+
+```ts
+// I alle split/fuse-metoder:
+tr.setMeta('addToHistory', false)
+```
+
+Etter undo kan en side underflowe (innhold ble fjernet) eller overfowe (innhold ble lagt til). Den vanlige korreksjons-syklusen håndterer dette automatisk i neste `view.update()`.
+
+---
+
+## Orphan/Widow-kontroll
+
+Typografisk standard: minimum 2 linjer på begge sider av et sideskift.
+
+### Orphan (isolert linje på slutten av en side)
+
+```ts
+// I splitParagraph — guard ved starten:
+const lineHeight = parseFloat(getComputedStyle(parDOM).lineHeight)
+if (remainingHeight < lineHeight * 2) {
+  return null // flytt hele paragrafen til neste side
+}
+```
+
+### Widow (isolert linje på starten av neste side)
+
+```ts
+// I splitParagraph — etter binærsøk:
+const totalLines = Math.round(parDOM.getBoundingClientRect().height / lineHeight)
+const headLines = Math.round(remainingHeight / lineHeight)
+const tailLines = totalLines - headLines
+
+if (tailLines < 2 && headLines > 2) {
+  // Reduser head med én linje og splitt på nytt
+  return splitParagraph(view, parPos, remainingHeight - lineHeight)
+}
+```
+
+### Konfigurasjon
+
+```ts
+type PaginationConfig = {
+  orphanLines: number // default: 2
+  widowLines: number // default: 2
+  debounceMs: number // default: 150
+  maxIterations: number // default: 50
+}
+```
+
+---
+
+## Split-merking
+
+### Attrs-skjema
+
+```ts
+splitId: string | null // delt ID mellom fragmentene
+splitPart: 'head' | 'mid' | 'tail' | null
+```
+
+### Kjeding over 3+ sider
+
+```
+Side 1:  { splitId: "abc", splitPart: "head" }
+Side 2:  { splitId: "abc", splitPart: "mid"  }
+Side 3:  { splitId: "abc", splitPart: "mid"  }
+Side 4:  { splitId: "abc", splitPart: "tail" }
+```
+
+Fusjonering skjer parvis innenfra og ut: mid+mid → mid, deretter mid+tail → tail, osv.
+
+### CSS for splittede noder
+
+```css
+[data-split-part='head'] {
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+[data-split-part='tail'],
+[data-split-part='mid'] {
+  text-indent: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+```
+
+---
+
+## Edge cases
+
+| Case                               | Håndtering                                         |
+| ---------------------------------- | -------------------------------------------------- |
+| `remainingHeight < 2 × lineHeight` | Flytt hele paragrafen (orphan-kontroll)            |
+| Tail < 2 linjer                    | Reduser head med én linje (widow-kontroll)         |
+| Tom paragraf                       | Flytt hel, ikke splitt                             |
+| Paragraf lengre enn én side        | Rekursiv splitting med mid-kjede                   |
+| Inline-bilder i paragraf           | Fall tilbake til blokk-splitting                   |
+| Tabell med merged cells (rowspan)  | Finn rowspan-trygg rad via TableMap                |
+| Tabell med nøstede tabeller        | Rekursiv høydemåling via getBoundingClientRect     |
+| Tabell med 1 rad som overflower    | Flytt hele tabellen til neste side                 |
+| Slettet innhold → underflow        | Pull fra neste side + sjekk fusjonering            |
+| Paste av stort innhold             | Batch-splitting i én transaksjon                   |
+| Undo/redo etter split              | Split er addToHistory:false, korrigeres automatisk |
+| Bullet/ordered list (nøstet)       | Splitt på list-item-grense, merk med splitId       |
+| Code block                         | Flytt hel til neste side (ikke splitt)             |
+
+---
+
+## Ytelseshensyn
+
+- **Dirty-tracking**: kun sider med endringer reflows — `Set<pageIndex>` fra step-mapping
+- **Debounce**: vent 150ms idle ved rask typing før reflow
+- **requestAnimationFrame** for DOM-målinger
+- **addToHistory: false** på alle split/fuse-transaksjoner
+- **Batch paste**: multiple splits i én transaksjon
+- Binærsøk: $O(\log n)$ per paragraf — neglisjerbart
+- Korreksjon: konvergerer typisk på 1–2 runder
+- `nodesBetween` på berørte sider, ikke `doc.descendants` over hele dokumentet
+- Cache linjehøyde per paragraf-stil (font + line-height combo)
