@@ -1,0 +1,894 @@
+# Pagineringsstrategi for tiptap-pagination-plus-plus
+
+## Overordnet arkitektur
+
+Paginering skjer i en **to-trinns pipeline**: et **synkront estimat** (cache-basert,
+i `appendTransaction`) etterfulgt av en **asynkron korreksjon** (DOM-basert,
+i `view.update`). PM-dokumentet er flat uten page-noder, og side-inndelingen
+eksisterer kun i plugin-state (`PageMap`) og DOM-laget (widget-dekorasjoner).
+
+Vi unngår destruktiv "flatten-and-resplit" (slik `prosemirror-pagination` gjør)
+og bruker i stedet **inkrementell splitting med korreksjon**.
+
+---
+
+## Dokumentmodell
+
+### PM doc (flat — ingen page-noder)
+
+```
+doc
+ ├─ paragraph (attrs: splitId?, splitPart?)
+ ├─ paragraph
+ ├─ table
+ ├─ paragraph
+ └─ ...
+```
+
+### DOM (visuell paginering via dekorasjoner)
+
+Innholdet rendres normalt av PM — flat flyt, ingen reparenting.
+Sidegrenser visualiseres med **widget-dekorasjoner** plassert mellom
+blokk-noder. Hver breaker-widget inneholder:
+
+```
+[spacer: remaining content height]   ← sikrer konstant visuell sidehøyde
+[footer for gjeldende side]
+[gap: visuelt mellomrom mellom sider]
+[header for neste side]
+```
+
+```html
+<div class="ProseMirror">
+  <p>...</p>
+  <p>...</p>
+  <!-- PM widget decoration: breaker -->
+  <div class="page-breaker">
+    <div class="page-spacer" style="height: 142px"></div>
+    <div class="page-footer">Side 1</div>
+    <div class="page-gap"></div>
+    <div class="page-header">Side 2</div>
+  </div>
+  <p>...</p>
+  <p>...</p>
+</div>
+```
+
+Første sides header er en separat widget-dekorasjon ved posisjon 0.
+
+### Visuell sidehøyde
+
+Visuell sidehøyde forblir **konstant** fordi spacerens høyde alltid
+fyller opp differansen mellom siste innholdsnodes bunn og
+sidegrensen:
+
+```
+spacerHeight = pageContentHeight − akkumulertInnholdshøyde
+```
+
+Spaceren er en `div` inni breaker-widgeten, isolert fra innholdsnoder —
+ingen margin collapsing, ingen påvirkning på PM-koordinater.
+
+### Fordeler med denne modellen
+
+- Flat PM doc: selections, paste, undo/redo, collab fungerer uten spesialhåndtering
+- Ingen kamp mot PM som vil joine/splitte på tvers av page-wrappere
+- Ingen DOM-reparenting — `posAtDOM`/`domAtPos` fungerer normalt
+- CSS-variabel-synking (`--page-number`, `--page-count`) for headers/footers
+- Side-tilhørighet styres av plugin-state, ikke schema-struktur
+
+---
+
+## Plugin state
+
+```ts
+type PageMap = {
+  pages: Array<{
+    startPos: number // inklusiv
+    endPos: number // eksklusiv
+    pageIndex: number
+  }>
+  dirtyPages: Set<number> // sider som trenger reflow
+}
+```
+
+### Høyde-cache
+
+Cachen er fundamentet for synkron estimering i `appendTransaction`.
+Indekseres på det som påvirker rendret høyde:
+
+```ts
+type HeightCacheKey = string // `${nodeTypeName}:${fontSize}:${lineHeight}:${contentLength}`
+
+type HeightCache = Map<HeightCacheKey, number>
+
+function cacheKey(node: PMNode): HeightCacheKey {
+  // Bygg nøkkel fra node-type og høyde-relevante attrs
+  const type = node.type.name
+  const fontSize = node.attrs.fontSize ?? 'default'
+  const lineHeight = node.attrs.lineHeight ?? 'default'
+  const len = node.content.size
+  return `${type}:${fontSize}:${lineHeight}:${len}`
+}
+```
+
+Cachen oppdateres i `view.update()` etter DOM-måling og konsumeres
+i `appendTransaction` for synkron estimering.
+
+### Dekorasjoner i plugin state
+
+Breaker-dekorasjonene bygges i `state.apply()`, ikke i `props.decorations()`.
+Dette sikrer at spacer-høyden er konsistent med transaksjonen som endret dokumentet —
+ingen frame-delay mellom innholdsendring og dekorasjons-oppdatering.
+
+```ts
+state: {
+  init(_, state): PaginationPluginState {
+    return {
+      pageMap: initialPageMap(state.doc),
+      decorations: buildDecorations(state.doc, initialPageMap, heightCache),
+      heightCache: new Map(),
+    }
+  },
+  apply(tr, prev, oldState, newState): PaginationPluginState {
+    if (!tr.docChanged) return prev
+
+    const pageMap = updatePageMap(prev.pageMap, tr)
+    const decorations = buildDecorations(
+      newState.doc, pageMap, prev.heightCache
+    )
+    return { ...prev, pageMap, decorations }
+  }
+}
+```
+
+---
+
+## To-trinns reflow-pipeline
+
+### Designprinsipp
+
+```
+appendTransaction (synkron, ingen DOM-tilgang):
+  → estimer overflow fra høyde-cache
+  → splitt/flytt blokker basert på estimat
+  → oppdater PageMap
+  → oppdater dekorasjoner med estimert spacer-høyde
+  → resultat: umiddelbar visuell oppdatering, 0-frame delay
+
+view.update (asynkron, DOM tilgjengelig):
+  → verifiser med faktisk DOM-måling
+  → oppdater høyde-cache
+  → korriger spacer-høyde hvis estimat var feil
+  → sub-paragraf splitting (krever DOM binærsøk)
+  → resultat: nøyaktig korreksjon, typisk usynlig for bruker
+```
+
+### Hva er synkront vs asynkront
+
+| Operasjon                   | Trinn | Hvorfor                                    |
+| --------------------------- | ----- | ------------------------------------------ |
+| Blokk-splitting (flytt hel) | 1     | Kan estimeres fra cache uten DOM           |
+| PageMap-oppdatering         | 1     | Ren data-manipulasjon                      |
+| Spacer-høyde (estimert)     | 1     | Cache-basert, ingen DOM                    |
+| Sub-paragraf splitting      | 2     | Krever Range-binærsøk i DOM                |
+| Spacer-høyde (verifisert)   | 2     | DOM-måling for nøyaktighet                 |
+| Høyde-cache oppdatering     | 2     | Trenger `getBoundingClientRect`            |
+| Fusjonering                 | 2     | Trenger DOM-verifisering av sideplassering |
+
+### Visuell stabilitet
+
+Mellom trinn 1 og trinn 2 er det typisk 1 frame (~16ms). I dette vinduet:
+
+- Sidegrenser er **korrekte på blokk-nivå** (riktige noder på riktige sider)
+- Spacer-høyde kan være **2-3px feil** (estimat vs faktisk)
+- Innhold hopper **aldri en hel side** — kun kosmetisk mikrojustering
+
+Over tid forbedres cachen og estimatene konvergerer mot nøyaktighet.
+
+---
+
+## Hovedflyt
+
+```
+Bruker endrer dokument
+ │
+ ├─ appendTransaction (synkron)
+ │   ├─ 1. markDirtyPages fra step-ranges
+ │   ├─ 2. For hver dirty side: estimer overflow fra cache
+ │   ├─ 3. Blokk-splitting: flytt hele noder (estimat-basert)
+ │   ├─ 4. Oppdater PageMap boundaries
+ │   ├─ 5. Bygg DecorationSet med estimerte spacer-høyder
+ │   └─ 6. Sett addToHistory: false
+ │
+ ├─ PM rendrer DOM med oppdaterte dekorasjoner
+ │
+ └─ view.update (asynkron, neste frame)
+     ├─ 7. Mål faktisk DOM-høyder, oppdater heightCache
+     ├─ 8. Verifiser sidegrenser — korrekt?
+     │   ├─ Ja → oppdater spacer-høyder hvis nødvendig
+     │   └─ Nei → dispatch korreksjon (ny appendTransaction-runde)
+     ├─ 9. Sub-paragraf splitting (binærsøk i DOM)
+     └─ 10. Fusjonering: sjekk splitId-par på samme side
+```
+
+---
+
+## Nøkkelmetoder
+
+### 1. Dirty-tracking
+
+Identifiser hvilke sider som ble påvirket av en transaksjon:
+
+```ts
+function markDirtyPages(tr: Transaction, pageMap: PageMap): Set<number> {
+  const dirty = new Set<number>()
+
+  tr.steps.forEach((step) => {
+    const map = step.getMap()
+    map.forEach((oldStart, oldEnd) => {
+      for (const page of pageMap.pages) {
+        if (oldStart < page.endPos && oldEnd > page.startPos) {
+          dirty.add(page.pageIndex)
+          if (page.pageIndex + 1 < pageMap.pages.length) {
+            dirty.add(page.pageIndex + 1)
+          }
+        }
+      }
+    })
+  })
+
+  return dirty
+}
+```
+
+### 2. Synkron overflow-estimering (appendTransaction)
+
+Bruker høyde-cache i stedet for DOM-måling:
+
+```ts
+function estimatePageOverflow(
+  doc: PMNode,
+  page: { startPos: number; endPos: number },
+  heightCache: HeightCache,
+  pageContentHeight: number
+): OverflowEstimate | null {
+  let accumulated = 0
+  let result: OverflowEstimate | null = null
+
+  doc.nodesBetween(page.startPos, page.endPos, (node, pos) => {
+    if (result) return false
+    if (!node.isBlock) return
+
+    const key = cacheKey(node)
+    const height = heightCache.get(key) ?? fallbackHeight(node)
+    accumulated += height
+
+    if (accumulated > pageContentHeight) {
+      result = {
+        nodePos: pos,
+        nodeType: node.type.name,
+        remainingHeight: pageContentHeight - (accumulated - height),
+        isEstimate: !heightCache.has(key),
+      }
+      return false
+    }
+  })
+
+  return result
+}
+
+function fallbackHeight(node: PMNode): number {
+  // Konservativt estimat når cache mangler
+  if (node.type.name === 'paragraph') {
+    const lineHeight = 24 // default, forbedres av cache
+    const estimatedLines = Math.ceil(node.textContent.length / 80)
+    return Math.max(estimatedLines, 1) * lineHeight
+  }
+  return 100 // grovt estimat for ukjente noder
+}
+```
+
+### 3. DOM-basert overflow-deteksjon (view.update)
+
+Verifiserer og korrigerer estimatet med faktisk DOM-måling:
+
+```ts
+function verifyAndCorrect(
+  view: EditorView,
+  pageMap: PageMap,
+  heightCache: HeightCache
+): Transaction | null {
+  const { doc } = view.state
+  let needsCorrection = false
+
+  for (const pageIndex of pageMap.dirtyPages) {
+    const page = pageMap.getPage(pageIndex)
+    if (!page) continue
+
+    // Mål og oppdater cache for alle noder på denne siden
+    doc.nodesBetween(page.startPos, page.endPos, (node, pos) => {
+      if (!node.isBlock) return
+      const dom = view.nodeDOM(pos) as HTMLElement
+      if (!dom) return
+
+      const measured = dom.getBoundingClientRect().height
+      const key = cacheKey(node)
+      const cached = heightCache.get(key)
+
+      heightCache.set(key, measured)
+
+      if (cached !== undefined && Math.abs(cached - measured) > 1) {
+        needsCorrection = true
+      }
+    })
+  }
+
+  if (needsCorrection) {
+    // Dispatch korreksjon — trigger ny appendTransaction-runde
+    const tr = view.state.tr.setMeta('paginationCorrection', true)
+    tr.setMeta('addToHistory', false)
+    return tr
+  }
+
+  return null
+}
+```
+
+### 4. Blokk-nivå splitting
+
+Når en hel blokk-node ikke passer, oppdaterer vi PageMap:
+
+```ts
+function splitAtBlock(pageMap: PageMap, overflowPageIndex: number, nodePos: number): PageMap {
+  const page = pageMap.pages[overflowPageIndex]
+  const updatedPage = { ...page, endPos: nodePos }
+
+  const nextPage = pageMap.pages[overflowPageIndex + 1]
+  if (nextPage) {
+    nextPage.startPos = nodePos
+  } else {
+    pageMap.pages.push({
+      startPos: nodePos,
+      endPos: page.endPos,
+      pageIndex: overflowPageIndex + 1,
+    })
+  }
+
+  pageMap.pages[overflowPageIndex] = updatedPage
+  return pageMap
+}
+```
+
+### 5. Sub-paragraf splitting
+
+Krever DOM-tilgang — kjøres i trinn 2 (view.update).
+Bruker binærsøk med `Range.getBoundingClientRect()` for å finne
+nøyaktig split-punkt. Håndterer mixed fonts, emoji, inline-noder
+korrekt fordi vi måler det rendrede resultatet.
+
+```ts
+function splitParagraph(
+  view: EditorView,
+  parPos: number,
+  remainingHeight: number
+): Transaction | null {
+  const { state } = view
+  const { tr } = state
+  const parNode = state.doc.nodeAt(parPos)
+
+  // ── Guard: plass til minst 2 linjer (orphan-kontroll) ──
+  const parDOM = view.nodeDOM(parPos) as HTMLElement
+  const lineHeight = parseFloat(getComputedStyle(parDOM).lineHeight)
+  if (remainingHeight < lineHeight * 2) return null
+
+  // ── Finn DOM-grense ──
+  const parRect = parDOM.getBoundingClientRect()
+  const maxY = parRect.top + remainingHeight
+
+  // ── TreeWalker over tekstnoder ──
+  const walker = document.createTreeWalker(parDOM, NodeFilter.SHOW_TEXT)
+  let splitTextNode: Text | null = null
+  let splitCharOffset = 0
+
+  while (walker.nextNode()) {
+    const textNode = walker.currentNode as Text
+    if (textNode.length === 0) continue
+
+    const range = document.createRange()
+    range.setStart(textNode, 0)
+    range.setEnd(textNode, textNode.length)
+    const textRect = range.getBoundingClientRect()
+
+    if (textRect.bottom <= maxY) continue
+
+    if (textRect.top >= maxY) {
+      splitTextNode = textNode
+      splitCharOffset = 0
+      break
+    }
+
+    // ── Binærsøk: O(log n) getBoundingClientRect-kall ──
+    let lo = 0
+    let hi = textNode.length
+
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1
+      range.setStart(textNode, 0)
+      range.setEnd(textNode, mid)
+
+      if (range.getBoundingClientRect().bottom <= maxY) {
+        lo = mid + 1
+      } else {
+        hi = mid
+      }
+    }
+
+    splitTextNode = textNode
+    splitCharOffset = lo
+    break
+  }
+
+  if (!splitTextNode) return null
+
+  // ── Juster til ordgrense ──
+  const text = splitTextNode.textContent!
+  let adjusted = splitCharOffset
+  while (adjusted > 0 && text[adjusted - 1] !== ' ') {
+    adjusted--
+  }
+  if (adjusted === 0) adjusted = splitCharOffset
+
+  // ── Widow-kontroll ──
+  const totalLines = Math.round(parDOM.getBoundingClientRect().height / lineHeight)
+  const headLines = Math.round(remainingHeight / lineHeight)
+  const tailLines = totalLines - headLines
+  if (tailLines < 2 && headLines > 2) {
+    return splitParagraph(view, parPos, remainingHeight - lineHeight)
+  }
+
+  // ── Map til PM-posisjon og splitt ──
+  const pmPos = view.posAtDOM(splitTextNode, adjusted)
+
+  tr.split(pmPos)
+  tr.setMeta('addToHistory', false)
+
+  // ── Merk begge deler med splitId ──
+  const splitId = crypto.randomUUID()
+  const headPos = parPos
+  const tailPos = tr.mapping.map(pmPos) + 1
+
+  tr.setNodeMarkup(headPos, null, {
+    ...parNode.attrs,
+    splitId,
+    splitPart: 'head',
+  })
+
+  tr.setNodeMarkup(tailPos, null, {
+    ...parNode.attrs,
+    splitId,
+    splitPart: 'tail',
+  })
+
+  return tr
+}
+```
+
+### 6. Multi-page paragraf
+
+En paragraf lengre enn én side splittes rekursivt.
+Eksisterende tail promoteres til mid:
+
+```ts
+function promoteTailToMid(tr: Transaction, existingTailPos: number): Transaction {
+  const node = tr.doc.nodeAt(existingTailPos)!
+  tr.setNodeMarkup(existingTailPos, null, {
+    ...node.attrs,
+    splitPart: 'mid',
+  })
+  return tr
+}
+```
+
+Resultat over 4 sider:
+
+```
+Side 1:  { splitId: "abc", splitPart: "head" }
+Side 2:  { splitId: "abc", splitPart: "mid"  }
+Side 3:  { splitId: "abc", splitPart: "mid"  }
+Side 4:  { splitId: "abc", splitPart: "tail" }
+```
+
+### 7. Fusjonering
+
+Finner og joiner splittede noder som havnet på samme side:
+
+```ts
+function findFusionPairs(
+  doc: PMNode,
+  pageMap: PageMap
+): Array<{ headPos: number; tailPos: number }> {
+  const pairs: Array<{ headPos: number; tailPos: number }> = []
+  const heads = new Map<string, { pos: number; pageIndex: number }>()
+
+  doc.descendants((node, pos) => {
+    if (!node.attrs.splitId) return
+
+    const pageIndex = pageMap.pages.findIndex((p) => pos >= p.startPos && pos < p.endPos)
+
+    if (node.attrs.splitPart === 'head' || node.attrs.splitPart === 'mid') {
+      heads.set(`${node.attrs.splitId}:${pos}`, { pos, pageIndex })
+    }
+
+    if (node.attrs.splitPart === 'tail' || node.attrs.splitPart === 'mid') {
+      for (const [key, head] of heads) {
+        if (
+          key.startsWith(node.attrs.splitId) &&
+          head.pageIndex === pageIndex &&
+          head.pos !== pos
+        ) {
+          pairs.push({ headPos: head.pos, tailPos: pos })
+          break
+        }
+      }
+    }
+  })
+
+  return pairs
+}
+
+function fusePair(tr: Transaction, headPos: number, tailPos: number): Transaction {
+  const headNode = tr.doc.nodeAt(headPos)!
+  const joinPos = headPos + headNode.nodeSize
+
+  tr.join(joinPos)
+  tr.setMeta('addToHistory', false)
+
+  const fusedNode = tr.doc.nodeAt(headPos)!
+  const hasMoreParts = nodeHasMoreSplitParts(tr.doc, fusedNode.attrs.splitId, headPos)
+
+  if (!hasMoreParts) {
+    tr.setNodeMarkup(headPos, null, {
+      ...fusedNode.attrs,
+      splitId: null,
+      splitPart: null,
+    })
+  }
+
+  return tr
+}
+```
+
+### 8. Tabellsplitting med rowspan-sikkerhet
+
+Tabeller splittes på rad-grense, aldri gjennom en celle med rowspan:
+
+```ts
+function findSafeTableSplitRow(
+  view: EditorView,
+  tablePos: number,
+  tableNode: PMNode,
+  remainingHeight: number
+): number | null {
+  const tableMap = TableMap.get(tableNode)
+  const tableDOM = view.nodeDOM(tablePos) as HTMLElement
+  const rows = tableDOM.querySelectorAll('tr')
+
+  // Bygg set av utrygge rader (celle med rowspan krysser grensen)
+  const unsafeRows = new Set<number>()
+
+  for (let row = 0; row < tableMap.height; row++) {
+    for (let col = 0; col < tableMap.width; col++) {
+      const cellPos = tableMap.map[row * tableMap.width + col]
+      const rect = tableMap.findCell(cellPos)
+      if (rect.bottom > rect.top + 1) {
+        for (let r = rect.top + 1; r < rect.bottom; r++) {
+          unsafeRows.add(r)
+        }
+      }
+    }
+  }
+
+  // Finn første trygge rad som overflower
+  let accumulated = 0
+  for (let i = 0; i < rows.length; i++) {
+    accumulated += rows[i].getBoundingClientRect().height
+    if (accumulated > remainingHeight) {
+      for (let safe = i; safe >= 1; safe--) {
+        if (!unsafeRows.has(safe)) return safe
+      }
+      return null // flytt hele tabellen
+    }
+  }
+
+  return null // tabellen passer
+}
+```
+
+### 9. Pull/push-korreksjon
+
+```ts
+function correctPageFill(
+  view: EditorView,
+  pageMap: PageMap,
+  pageIndex: number
+): 'overflow' | 'underflow' | 'ok' {
+  const bodyEl = getPageBodyElement(view, pageIndex)
+  const nextPage = pageMap.pages[pageIndex + 1]
+
+  if (bodyEl.scrollHeight > bodyEl.clientHeight) {
+    return 'overflow'
+  }
+
+  if (nextPage) {
+    const availableSpace = bodyEl.clientHeight - bodyEl.scrollHeight
+    const firstNodePos = nextPage.startPos
+    const firstNodeDOM = view.nodeDOM(firstNodePos) as HTMLElement
+    const firstNodeHeight = firstNodeDOM?.getBoundingClientRect().height ?? Infinity
+
+    if (firstNodeHeight <= availableSpace) {
+      return 'underflow'
+    }
+  }
+
+  return 'ok'
+}
+```
+
+### 10. Paste-håndtering
+
+Batch-splitting i én transaksjon, bypass-er debounce:
+
+```ts
+function handlePaste(view: EditorView, tr: Transaction, pageMap: PageMap): Transaction {
+  const pastePageIndex = pageMap.pages.findIndex(
+    (p) => tr.selection.from >= p.startPos && tr.selection.from < p.endPos
+  )
+
+  let currentTr = tr
+  let safety = 0
+  const MAX_ITERATIONS = 50
+
+  while (safety++ < MAX_ITERATIONS) {
+    const overflow = findOverflowNode(view /* ... */)
+    if (!overflow) break
+
+    if (overflow.nodeType === 'paragraph') {
+      const result = splitParagraph(view, overflow.nodePos, overflow.remainingHeight)
+      if (result) currentTr = result
+    } else {
+      splitAtBlock(pageMap, pastePageIndex + safety, overflow.nodePos)
+    }
+  }
+
+  currentTr.setMeta('addToHistory', false)
+  return currentTr
+}
+```
+
+---
+
+## Breaker-dekorasjon
+
+Hver sidegrense rendres som en widget-dekorasjon plassert etter
+siste node på siden. Widgeten eier all visuell side-infrastruktur:
+
+```ts
+function createBreakerWidget(
+  pageIndex: number,
+  remainingHeight: number,
+  config: PaginationConfig
+): HTMLElement {
+  const container = document.createElement('div')
+  container.classList.add('page-breaker')
+  container.dataset.pageBreak = String(pageIndex)
+
+  // Spacer — fyller resten av siden
+  const spacer = document.createElement('div')
+  spacer.classList.add('page-spacer')
+  spacer.style.height = `${remainingHeight}px`
+
+  // Footer for gjeldende side
+  const footer = createFooter(pageIndex, config)
+
+  // Gap mellom sider
+  const gap = document.createElement('div')
+  gap.classList.add('page-gap')
+  gap.style.height = `${config.pageGap}px`
+
+  // Header for neste side
+  const header = createHeader(pageIndex + 1, config)
+
+  container.append(spacer, footer, gap, header)
+  return container
+}
+```
+
+### CSS
+
+```css
+.page-breaker {
+  width: 100%;
+  pointer-events: none; /* Klikk går gjennom til editoren */
+  user-select: none;
+}
+
+.page-spacer {
+  /* Tom — bare høyde, sikrer konstant visuell sidehøyde */
+}
+
+.page-gap {
+  background: var(--editor-bg, #f0f0f0);
+  border-top: 1px solid var(--page-border-color, #e5e5e5);
+  border-bottom: 1px solid var(--page-border-color, #e5e5e5);
+}
+
+.page-header,
+.page-footer {
+  pointer-events: auto; /* Headers/footers er klikkbare */
+}
+```
+
+### CSS-variabler for geometri
+
+Settes på editor-elementet av plugin, konsumeres av CSS:
+
+```css
+.ProseMirror {
+  --page-width: 210mm;
+  --page-height: 297mm;
+  --page-margin-top: 25mm;
+  --page-margin-bottom: 25mm;
+  --page-margin-left: 25mm;
+  --page-margin-right: 25mm;
+  --page-content-height: 247mm; /* beregnet */
+  --page-gap: 40px;
+  --page-count: 3;
+}
+```
+
+CSS-counter for sidetall:
+
+```css
+.ProseMirror {
+  counter-reset: page-number;
+}
+
+.page-breaker {
+  counter-increment: page-number;
+}
+
+.page-number::before {
+  content: counter(page-number);
+}
+```
+
+---
+
+## Undo/Redo-interaksjon
+
+Alle split/fuse-transaksjoner merkes med `addToHistory: false`.
+Ctrl+Z angrer kun brukerens egne endringer. Etter undo trigger
+den vanlige korreksjons-syklusen automatisk reflow.
+
+---
+
+## Orphan/Widow-kontroll
+
+Typografisk standard: minimum 2 linjer på begge sider av et sideskift.
+
+**Orphan** (for få linjer på slutten av en side):
+
+```ts
+if (remainingHeight < lineHeight * config.orphanLines) {
+  return null // flytt hele paragrafen
+}
+```
+
+**Widow** (for få linjer på starten av neste side):
+
+```ts
+if (tailLines < config.widowLines && headLines > config.widowLines) {
+  return splitParagraph(view, parPos, remainingHeight - lineHeight)
+}
+```
+
+### Konfigurasjon
+
+```ts
+type PaginationConfig = {
+  pageSize: 'A4' | 'Letter' | { width: number; height: number }
+  margins: { top: number; right: number; bottom: number; left: number }
+  orientation: 'portrait' | 'landscape'
+  orphanLines: number // default: 2
+  widowLines: number // default: 2
+  splitParagraphs: boolean // default: true
+  splitTables: boolean // default: true
+  debounceMs: number // default: 150
+  maxIterations: number // default: 50
+  pageGap: number // default: 40
+  headerHeight: number // default: 0
+  footerHeight: number // default: 0
+}
+```
+
+---
+
+## Split-merking
+
+### Attrs-skjema
+
+```ts
+splitId: string | null // delt ID mellom fragmentene
+splitPart: 'head' | 'mid' | 'tail' | null
+```
+
+### Kjeding over 3+ sider
+
+```
+Side 1:  { splitId: "abc", splitPart: "head" }
+Side 2:  { splitId: "abc", splitPart: "mid"  }
+Side 3:  { splitId: "abc", splitPart: "mid"  }
+Side 4:  { splitId: "abc", splitPart: "tail" }
+```
+
+### CSS for splittede noder
+
+```css
+[data-split-part='head'] {
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+[data-split-part='tail'],
+[data-split-part='mid'] {
+  text-indent: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+```
+
+---
+
+## Edge cases
+
+| Case                               | Håndtering                                         |
+| ---------------------------------- | -------------------------------------------------- |
+| `remainingHeight < 2 × lineHeight` | Flytt hele paragrafen (orphan-kontroll)            |
+| Tail < 2 linjer                    | Reduser head med én linje (widow-kontroll)         |
+| Tom paragraf                       | Flytt hel, ikke splitt                             |
+| Paragraf lengre enn én side        | Rekursiv splitting med mid-kjede                   |
+| Inline-bilder i paragraf           | Fall tilbake til blokk-splitting                   |
+| Tabell med merged cells (rowspan)  | Finn rowspan-trygg rad via TableMap                |
+| Tabell med nøstede tabeller        | Rekursiv høydemåling via getBoundingClientRect     |
+| Tabell med 1 rad som overflower    | Flytt hele tabellen til neste side                 |
+| Slettet innhold → underflow        | Pull fra neste side + sjekk fusjonering            |
+| Paste av stort innhold             | Batch-splitting i én transaksjon                   |
+| Undo/redo etter split              | Split er addToHistory:false, korrigeres automatisk |
+| Bullet/ordered list (nøstet)       | Splitt på list-item-grense, merk med splitId       |
+| Code block                         | Flytt hel til neste side (ikke splitt)             |
+
+---
+
+## Ytelseshensyn
+
+### Høyde-cache
+
+- Indekseres på `nodeType:fontSize:lineHeight:contentSize`
+- Oppdateres i `view.update()` etter DOM-måling
+- Konsumeres i `appendTransaction` for synkron estimering
+- Fallback-estimat for cache-miss: linjeantall × default linjehøyde
+- Cache invalideres ved font-endring, vindu-resize, eller config-endring
+
+### Ytelsesstrategier
+
+- **To-trinns pipeline**: synkron estimat eliminerer de fleste synlige glitches
+- **Dirty-tracking**: kun sider med endringer reflows — `Set<pageIndex>`
+- **Debounce**: vent 150ms idle ved rask typing før trinn 2 (DOM-måling)
+- **appendTransaction er ikke debounced**: synkron estimering kjører alltid
+- **addToHistory: false** på alle split/fuse-transaksjoner
+- **Batch paste**: multiple splits i én transaksjon, bypass-er debounce
+- **Dekorasjoner i plugin state**: oppdateres synkront med transaksjoner
+- Binærsøk: $O(\log n)$ per paragraf — neglisjerbart
+- Korreksjon: konvergerer typisk på 1–2 runder
+- `nodesBetween` på berørte sider, ikke `doc.descendants`

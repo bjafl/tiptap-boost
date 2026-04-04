@@ -1,5 +1,5 @@
 import { EditorView } from '@tiptap/pm/view'
-import { DomColumnHeight } from '../utils/DomSizeCalculator'
+import { DomColumnHeight } from '../utils/DomColumnHeight'
 import { findSplitRequest, type SplitRequest } from './splitStrategies'
 
 /** Don't attempt a split when less than this many px remain — avoids orphan slivers. */
@@ -34,7 +34,10 @@ export function computePages(
       // Try to split the node to fill the remaining space on the current page.
       if (remaining >= MIN_SPLIT_HEIGHT) {
         const split = findSplitRequest(view, node, offset, dom, remaining, appliedSplitPositions)
-        if (split !== null) { splits.push(split); return }
+        if (split !== null) {
+          splits.push(split)
+          return
+        }
       }
 
       // No split found — close the current page and try placing the whole node on the next.
@@ -45,12 +48,24 @@ export function computePages(
       if (!pageSize.tryAddChild(dom)) {
         // Node is taller than a full page — attempt a split with the full page height.
         const split = findSplitRequest(
-          view, node, offset, dom, maxPageContentHeight, appliedSplitPositions
+          view,
+          node,
+          offset,
+          dom,
+          maxPageContentHeight,
+          appliedSplitPositions
         )
-        if (split !== null) { splits.push(split); return }
+        if (split !== null) {
+          splits.push(split)
+          return
+        }
 
         // Unsplittable oversized node — place it alone and let it overflow.
-        pages.push({ startPos: offset, endPos: offset + node.nodeSize, contentHeight: pageSize.height })
+        pages.push({
+          startPos: offset,
+          endPos: offset + node.nodeSize,
+          contentHeight: pageSize.height,
+        })
         pageStartPos = offset + node.nodeSize
         pageSize = new DomColumnHeight(maxPageContentHeight)
       }

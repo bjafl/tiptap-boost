@@ -1,0 +1,70 @@
+{
+  "name": "@tiptap-boost/pagination",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./styles/*": "./dist/styles/*"
+  },
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "package.json"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "build": "tsc -b && copyfiles -u 2 src/styles/**/* dist/styles",
+    "dev": "tsc-watch --onSuccess \"echo 'Build completed'\"",
+    "watch": "tsc-watch --onSuccess \"echo 'Build completed'\"",
+    "clean": "rimraf dist *.tsbuildinfo",
+    "prebuild": "pnpm clean"
+  },
+  "keywords": [
+    "tiptap",
+    "tiptap extension",
+    "pagination",
+    "page",
+    "break",
+    "header",
+    "footer",
+    "customizable",
+    "layouts",
+    "extension"
+  ],
+  "author": "Bjarte Lode",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/bjafl/tiptap-boost/issues?labels=tiptap-pagination"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bjafl/tiptap-boost",
+    "directory": "packages/tiptap-pagination-plus-plus"
+  },
+  "peerDependencies": {
+    "@tiptap/core": "^2.0.0 || ^3.0.0",
+    "@tiptap/pm": "^2.0.0 || ^3.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@tiptap/core": "^3.21.0",
+    "@tiptap/pm": "^3.21.0",
+    "@types/node": "^22.15.2",
+    "copyfiles": "^2.4.1",
+    "jsdom": "^29.0.1",
+    "tsc-watch": "^6.0.4",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@tiptap/extension-document": "^3.21.0"
+  }
+}

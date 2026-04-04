@@ -1,7 +1,7 @@
 import { EditorView } from '@tiptap/pm/view'
 import { Node as PMNode, NodeType, ResolvedPos } from '@tiptap/pm/model'
 import type { Attrs } from '@tiptap/pm/model'
-import { DomColumnHeight } from '../utils/DomSizeCalculator'
+import { DomColumnHeight } from '../utils/DomColumnHeight'
 
 export interface SplitRequest {
   pos: number
@@ -92,10 +92,17 @@ function findLineBoundary(
   while (searchLo <= searchHi) {
     const mid = (searchLo + searchHi) >> 1
     const y = posLineTop(view, mid)
-    if (y === null) { searchLo = mid + 1; continue }
+    if (y === null) {
+      searchLo = mid + 1
+      continue
+    }
 
-    if (y < pageBreakY) { fittingPos = mid; searchLo = mid + 1 }
-    else { searchHi = mid - 1 }
+    if (y < pageBreakY) {
+      fittingPos = mid
+      searchLo = mid + 1
+    } else {
+      searchHi = mid - 1
+    }
   }
 
   if (fittingPos === null) return null
@@ -110,18 +117,28 @@ function findLineBoundary(
   while (searchLo <= searchHi) {
     const mid = (searchLo + searchHi) >> 1
     const y = posLineTop(view, mid)
-    if (y === null) { searchLo = mid + 1; continue }
+    if (y === null) {
+      searchLo = mid + 1
+      continue
+    }
 
-    if (y > fittingLineTop) { nextLineStart = mid; searchHi = mid - 1 }
-    else { searchLo = mid + 1 }
+    if (y > fittingLineTop) {
+      nextLineStart = mid
+      searchHi = mid - 1
+    } else {
+      searchLo = mid + 1
+    }
   }
 
   return nextLineStart ?? fittingPos
 }
 
 function posLineTop(view: EditorView, pos: number): number | null {
-  try { return view.coordsAtPos(pos).top }
-  catch { return null }
+  try {
+    return view.coordsAtPos(pos).top
+  } catch {
+    return null
+  }
 }
 
 // ─── List ─────────────────────────────────────────────────────────────────────

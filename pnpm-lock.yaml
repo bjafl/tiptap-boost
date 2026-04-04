@@ -157,6 +157,37 @@ importers:
         specifier: ^8.0.1
         version: 8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(sass-embedded@1.98.0)(sass@1.98.0)
 
+  packages/pagination:
+    dependencies:
+      '@tiptap/extension-document':
+        specifier: ^3.21.0
+        version: 3.21.0(@tiptap/core@3.21.0(@tiptap/pm@3.21.0))
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.58.2
+        version: 1.58.2
+      '@tiptap/core':
+        specifier: ^3.21.0
+        version: 3.21.0(@tiptap/pm@3.21.0)
+      '@tiptap/pm':
+        specifier: ^3.21.0
+        version: 3.21.0
+      '@types/node':
+        specifier: ^22.15.2
+        version: 22.19.15
+      copyfiles:
+        specifier: ^2.4.1
+        version: 2.4.1
+      jsdom:
+        specifier: ^29.0.1
+        version: 29.0.1
+      tsc-watch:
+        specifier: ^6.0.4
+        version: 6.3.1(typescript@5.9.3)
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+
   packages/pdf:
     devDependencies:
       '@tiptap/core':
