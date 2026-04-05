@@ -126,11 +126,7 @@ export class ReflowController {
 
   // ── Private: core reflow logic ────────────────────────────────────────────
 
-  private runReflow(
-    view: EditorView,
-    pageMap: PageMap,
-    heightCache: HeightCache
-  ): ReflowResult {
+  private runReflow(view: EditorView, pageMap: PageMap, heightCache: HeightCache): ReflowResult {
     this.lastReflowTime = Date.now()
 
     const tr = view.state.tr
@@ -141,9 +137,16 @@ export class ReflowController {
     this.measureAndCacheHeights(view, pageMap, heightCache)
 
     const dirtyPages = pageMap.dirtyPages()
-    logger.group('reflow', `runReflow — ${dirtyPages.length} dirty page(s): [${dirtyPages}]`, () => {
-      logger.log('reflow', `contentHeight: ${this.geometry.contentHeight}px, docSize: ${view.state.doc.content.size}`)
-    })
+    logger.group(
+      'reflow',
+      `runReflow — ${dirtyPages.length} dirty page(s): [${dirtyPages}]`,
+      () => {
+        logger.log(
+          'reflow',
+          `contentHeight: ${this.geometry.contentHeight}px, docSize: ${view.state.doc.content.size}`
+        )
+      }
+    )
 
     let safety = 0
     const remaining = [...dirtyPages]
@@ -169,7 +172,10 @@ export class ReflowController {
       // Fill in the page index — detectOverflow can't know it.
       overflow.pageIndex = pageIndex
 
-      logger.log('overflow', `page ${pageIndex} — overflow at pos ${overflow.nodePos} (${overflow.nodeType}), remaining: ${overflow.remainingHeight.toFixed(1)}px`)
+      logger.log(
+        'overflow',
+        `page ${pageIndex} — overflow at pos ${overflow.nodePos} (${overflow.nodeType}), remaining: ${overflow.remainingHeight.toFixed(1)}px`
+      )
 
       const handled = this.handleOverflow(view, overflow, pageMap, ptx)
       if (handled) {
@@ -179,7 +185,10 @@ export class ReflowController {
     }
 
     if (safety >= this.config.maxIterations) {
-      logger.log('reflow', `⚠ hit maxIterations (${this.config.maxIterations}) — reflow may be incomplete`)
+      logger.log(
+        'reflow',
+        `⚠ hit maxIterations (${this.config.maxIterations}) — reflow may be incomplete`
+      )
     }
 
     const fused = this.fuseIfNeeded(view, pageMap, ptx)
@@ -208,7 +217,7 @@ export class ReflowController {
     endPos: number,
     heightCache: HeightCache
   ): OverflowResult | null {
-    const col = new DomColumnHeight(this.geometry.contentHeight)
+    const col = DomColumnHeight.fromPageGeometry(this.geometry)
     let result: OverflowResult | null = null
 
     doc.nodesBetween(startPos, endPos, (node, pos) => {
@@ -241,11 +250,20 @@ export class ReflowController {
     endPos: number
   ): OverflowResult | null {
     const { doc } = view.state
-    const col = new DomColumnHeight(this.geometry.contentHeight)
+    const col = DomColumnHeight.fromPageGeometry(this.geometry)
     let result: OverflowResult | null = null
 
     const isVerbose = logger.isEnabled('overflow')
-    const nodeRows: Array<{ pos: number; type: string; el: HTMLElement; h: number; mt: number; mb: number; accumulated: number; fits: boolean }> = []
+    const nodeRows: Array<{
+      pos: number
+      type: string
+      el: HTMLElement
+      h: number
+      mt: number
+      mb: number
+      accumulated: number
+      fits: boolean
+    }> = []
 
     doc.nodesBetween(startPos, endPos, (node, pos) => {
       if (result) return false
@@ -254,18 +272,16 @@ export class ReflowController {
       const domEl = view.nodeDOM(pos) as HTMLElement | null
       if (!domEl) return false
 
-      const fits = col.tryAddChild(domEl)
+      const { fits, ...size } = col.tryAddChild(domEl)
 
       if (isVerbose) {
-        const rect = domEl.getBoundingClientRect()
-        const style = getComputedStyle(domEl)
         nodeRows.push({
           pos,
           type: node.type.name,
           el: domEl,
-          h: rect.height,
-          mt: parseFloat(style.marginTop) || 0,
-          mb: parseFloat(style.marginBottom) || 0,
+          h: size.height,
+          mt: size.mt,
+          mb: size.mb,
           accumulated: col.height,
           fits,
         })
@@ -283,17 +299,21 @@ export class ReflowController {
     })
 
     if (isVerbose) {
-      logger.group('overflow', `detectOverflow [${startPos}..${endPos}] — maxH: ${this.geometry.contentHeight}px`, () => {
-        for (const row of nodeRows) {
-          const mark = row.fits ? '  ✓' : '  ✗ OVERFLOW'
-          console.log(
-            `%c  pos ${row.pos} ${row.type}%c  h=${row.h.toFixed(1)} mt=${row.mt.toFixed(1)} mb=${row.mb.toFixed(1)}  accumulated=${row.accumulated.toFixed(1)}${mark}`,
-            'color: #6b7280',
-            '',
-            row.el
-          )
+      logger.group(
+        'overflow',
+        `detectOverflow [${startPos}..${endPos}] — maxH: ${this.geometry.contentHeight}px`,
+        () => {
+          for (const row of nodeRows) {
+            const mark = row.fits ? '  ✓' : '  ✗ OVERFLOW'
+            console.log(
+              `%c  pos ${row.pos} ${row.type}%c  h=${row.h.toFixed(1)} mt=${row.mt.toFixed(1)} mb=${row.mb.toFixed(1)}  accumulated=${row.accumulated.toFixed(1)}${mark}`,
+              'color: #6b7280',
+              '',
+              row.el
+            )
+          }
         }
-      })
+      )
     }
 
     return result
@@ -322,8 +342,14 @@ export class ReflowController {
 
       const pageBottom = this.getPageBottomY(view, pageIndex, pageMap)
       const parRect = domEl.getBoundingClientRect()
-      const domOverflow = parRect.bottom - pageBottom
-      logger.log('split', `paragraph at ${nodePos} — el.top: ${parRect.top.toFixed(1)}, el.bottom: ${parRect.bottom.toFixed(1)}, pageBottom: ${pageBottom.toFixed(1)}, overflow: ${domOverflow.toFixed(1)}px`,
+      const parMb = parseFloat(getComputedStyle(domEl).marginBottom) || 0
+      const mb = Math.max(parMb, this.geometry.footerMargins.inner)
+      const parBottom = parRect.bottom + mb
+
+      const domOverflow = parBottom - pageBottom
+      logger.log(
+        'split',
+        `paragraph at ${nodePos} — el.top: ${parRect.top.toFixed(1)}, el.bottom: ${parBottom.toFixed(1)}, pageBottom: ${pageBottom.toFixed(1)}, overflow: ${domOverflow.toFixed(1)}px`,
         domEl
       )
 
@@ -331,7 +357,10 @@ export class ReflowController {
       // node as overflowing when the actual DOM rect fits. If the element ends
       // before the page bottom, treat this as a false positive and skip.
       if (domOverflow <= 0) {
-        logger.log('split', `paragraph at ${nodePos} — DOM rect fits (overflow ${domOverflow.toFixed(1)}px ≤ 0), skipping`)
+        logger.log(
+          'split',
+          `paragraph at ${nodePos} — DOM rect fits (overflow ${domOverflow.toFixed(1)}px ≤ 0), skipping`
+        )
         return false
       }
 
@@ -343,11 +372,32 @@ export class ReflowController {
         return true
       }
 
-      logger.log('split', `paragraph at ${nodePos} — splitting at char offset ${splitResult.offset} (head: ${splitResult.headLines} lines, tail: ${splitResult.tailLines} lines, wordBoundary: ${splitResult.adjustedToWordBoundary})`,
+      logger.log(
+        'split',
+        `paragraph at ${nodePos} — splitting at char offset ${splitResult.offset} (head: ${splitResult.headLines} lines, tail: ${splitResult.tailLines} lines, wordBoundary: ${splitResult.adjustedToWordBoundary})`,
         domEl
       )
       const pmPos = this.textFinder.toPmPos(splitResult, view)
-      ptx.splitParagraphAt(pmPos, nodePos, node.attrs, pageIndex)
+      const { tailPos } = ptx.splitParagraphAt(pmPos, nodePos, node.attrs, pageIndex)
+
+      // Update the PageMap boundary so head stays on pageIndex and tail moves to
+      // pageIndex + 1. Without this fuseIfNeeded sees both on the same page and
+      // immediately fuses them → infinite loop.
+      const currentPage = pageMap.getPage(pageIndex)
+      if (pageMap.getPage(pageIndex + 1)) {
+        pageMap.setSplitBoundary(pageIndex, tailPos)
+      } else {
+        // Splitting the last page: capture current endPos before overwriting it,
+        // then create a new page for the tail content.
+        const oldEnd = currentPage ? currentPage.endPos : tailPos
+        pageMap.setSplitBoundary(pageIndex, tailPos)
+        pageMap.insertPageAfter(pageIndex, tailPos, oldEnd)
+      }
+
+      logger.log(
+        'pagemap',
+        `split boundary set: page ${pageIndex} endPos → ${tailPos}, tail on page ${pageIndex + 1}`
+      )
       return true
     }
 
@@ -363,13 +413,18 @@ export class ReflowController {
       const tableRect = domEl.getBoundingClientRect()
       const pageBottom = this.getPageBottomY(view, pageIndex, pageMap)
       if (tableRect.bottom <= pageBottom) {
-        logger.log('split', `table at ${nodePos} — DOM rect fits (overflow ${(tableRect.bottom - pageBottom).toFixed(1)}px ≤ 0), skipping`)
+        logger.log(
+          'split',
+          `table at ${nodePos} — DOM rect fits (overflow ${(tableRect.bottom - pageBottom).toFixed(1)}px ≤ 0), skipping`
+        )
         return false
       }
 
       const plan = this.tableFinder.analyze(node, domEl, remainingHeight)
       if (!plan || plan.splitBeforeRow === null) {
-        logger.log('split', `table at ${nodePos} — no safe split row (${plan ? 'rowspan conflict' : 'fits'}), moving whole table`,
+        logger.log(
+          'split',
+          `table at ${nodePos} — no safe split row (${plan ? 'rowspan conflict' : 'fits'}), moving whole table`,
           domEl
         )
         ptx.moveToNextPage(nodePos, pageMap)
@@ -377,7 +432,9 @@ export class ReflowController {
       }
 
       // TODO: implement actual table row split transaction
-      logger.log('split', `table at ${nodePos} — safe split before row ${plan.splitBeforeRow} (of ${plan.rowHeights.length} rows), table splitting not yet implemented — moving whole table`,
+      logger.log(
+        'split',
+        `table at ${nodePos} — safe split before row ${plan.splitBeforeRow} (of ${plan.rowHeights.length} rows), table splitting not yet implemented — moving whole table`,
         { rowHeights: plan.rowHeights, unsafeRows: [...plan.unsafeRows] },
         domEl
       )
@@ -391,11 +448,18 @@ export class ReflowController {
       const rect = domEl.getBoundingClientRect()
       const pageBottom = this.getPageBottomY(view, pageIndex, pageMap)
       if (rect.bottom <= pageBottom) {
-        logger.log('split', `${nodeType} at ${nodePos} — DOM rect fits (overflow ${(rect.bottom - pageBottom).toFixed(1)}px ≤ 0), skipping`)
+        logger.log(
+          'split',
+          `${nodeType} at ${nodePos} — DOM rect fits (overflow ${(rect.bottom - pageBottom).toFixed(1)}px ≤ 0), skipping`
+        )
         return false
       }
     }
-    logger.log('split', `${nodeType} at ${nodePos} — moving whole block to next page`, domEl ?? '(no DOM)')
+    logger.log(
+      'split',
+      `${nodeType} at ${nodePos} — moving whole block to next page`,
+      domEl ?? '(no DOM)'
+    )
     ptx.moveToNextPage(nodePos, pageMap)
     return true
   }
@@ -431,7 +495,7 @@ export class ReflowController {
       if (!firstNodeDOM) break
 
       // Re-accumulate current page height (boundary may have moved in previous iteration).
-      const col = new DomColumnHeight(this.geometry.contentHeight)
+      const col = DomColumnHeight.fromPageGeometry(this.geometry)
       doc.nodesBetween(page.startPos, page.endPos, (node, pos) => {
         if (!node.isBlock || node === doc) return true
         const domEl = view.nodeDOM(pos) as HTMLElement | null
@@ -440,7 +504,9 @@ export class ReflowController {
       })
 
       const peek = col.peekChild(firstNodeDOM)
-      logger.log('overflow', `page ${pageIndex} pull check — accumulated: ${col.height.toFixed(1)}px, remaining: ${col.remaining.toFixed(1)}px, candidate h: ${peek.elementHeight.toFixed(1)}px, fits: ${peek.fits}`,
+      logger.log(
+        'overflow',
+        `page ${pageIndex} pull check — accumulated: ${col.height.toFixed(1)}px, remaining: ${col.remaining.toFixed(1)}px, candidate h: ${peek.elementHeight.toFixed(1)}px, fits: ${peek.fits}`,
         firstNodeDOM
       )
 
@@ -492,7 +558,13 @@ export class ReflowController {
       const page = pageMap.getPage(pageIndex)
       if (!page) continue
 
-      const pageRows: Array<{ pos: number; type: string; key: string; el: HTMLElement; h: number }> = []
+      const pageRows: Array<{
+        pos: number
+        type: string
+        key: string
+        el: HTMLElement
+        h: number
+      }> = []
 
       doc.nodesBetween(page.startPos, page.endPos, (node, pos) => {
         if (!node.isBlock || node === doc) return true
@@ -509,19 +581,27 @@ export class ReflowController {
       })
 
       if (isVerbose && pageRows.length > 0) {
-        logger.group('reflow', `cache: page ${pageIndex} — ${pageRows.length} node(s) measured`, () => {
-          for (const row of pageRows) {
-            console.log(
-              `%c  pos ${row.pos} ${row.type}%c  h=${row.h.toFixed(1)}px  key="${row.key}"`,
-              'color: #6b7280', '',
-              row.el
-            )
+        logger.group(
+          'reflow',
+          `cache: page ${pageIndex} — ${pageRows.length} node(s) measured`,
+          () => {
+            for (const row of pageRows) {
+              console.log(
+                `%c  pos ${row.pos} ${row.type}%c  h=${row.h.toFixed(1)}px  key="${row.key}"`,
+                'color: #6b7280',
+                '',
+                row.el
+              )
+            }
           }
-        })
+        )
       }
     }
 
-    logger.log('reflow', `height cache: ${measured} node(s) measured, total entries: ${heightCache.size}`)
+    logger.log(
+      'reflow',
+      `height cache: ${measured} node(s) measured, total entries: ${heightCache.size}`
+    )
   }
 
   /**
@@ -534,7 +614,11 @@ export class ReflowController {
     const result = new Map<number, number>()
 
     for (const page of pageMap.allPages()) {
-      const col = new DomColumnHeight(Infinity)
+      const col = new DomColumnHeight(
+        Infinity,
+        this.geometry.headerMargins.inner,
+        this.geometry.footerMargins.inner
+      )
 
       doc.nodesBetween(page.startPos, page.endPos, (node, pos) => {
         if (!node.isBlock || node === doc) return true
@@ -566,9 +650,13 @@ export class ReflowController {
     if (!firstNodeDOM) return Infinity
 
     const rect = firstNodeDOM.getBoundingClientRect()
-    const pageBottom = rect.top + this.geometry.contentHeight
+    const firstNodeMt = parseFloat(getComputedStyle(firstNodeDOM).marginTop) || 0
+    const mt = Math.max(firstNodeMt, this.geometry.headerMargins.inner)
+    const pageBottom = rect.top - mt + this.geometry.contentHeight
 
-    logger.log('overflow', `page ${pageIndex} bottom Y — firstNode.top: ${rect.top.toFixed(1)}, contentHeight: ${this.geometry.contentHeight}px, pageBottom: ${pageBottom.toFixed(1)}`,
+    logger.log(
+      'overflow',
+      `page ${pageIndex} bottom Y — firstNode.top: ${rect.top.toFixed(1)}, contentHeight: ${this.geometry.contentHeight}px, pageBottom: ${pageBottom.toFixed(1)}`,
       firstNodeDOM
     )
 

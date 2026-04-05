@@ -1,3 +1,5 @@
+import { PageGeometry } from './PageGeometry'
+
 /**
  * Tracks the accumulated height of a column of block elements, including
  * CSS margin collapsing between adjacent siblings.
@@ -22,14 +24,25 @@ export class DomColumnHeight {
   private count: number = 0
   private _height: number = 0
   private maxContentHeight: number
+  private contextMarginTop: number
+  private contextMarginBottom: number
 
   /**
    * @param maxContentHeight  Available height in the page body.
    *   Should account for page-body padding if the body establishes
    *   a BFC (overflow: hidden, display: flow-root, etc.).
    */
-  constructor(maxContentHeight: number) {
+  constructor(maxContentHeight: number, contextMarginTop: number, contextMarginBottom: number) {
     this.maxContentHeight = maxContentHeight
+    this.contextMarginTop = contextMarginTop
+    this.contextMarginBottom = contextMarginBottom
+  }
+  static fromPageGeometry(config: PageGeometry) {
+    return new DomColumnHeight(
+      config.contentHeight,
+      config.headerMargins.inner,
+      config.footerMargins.inner
+    )
   }
 
   /** Current accumulated height including margins. */
@@ -72,22 +85,26 @@ export class DomColumnHeight {
    * Accepts either an HTMLElement (measures automatically) or
    * pre-computed values to avoid redundant `getComputedStyle` calls.
    */
-  tryAddChild(el: HTMLElement): boolean
-  tryAddChild(height: number, marginTop: number, marginBottom: number): boolean
+  tryAddChild(el: HTMLElement): { fits: boolean; height: number; mt: number; mb: number }
+  tryAddChild(
+    height: number,
+    marginTop: number,
+    marginBottom: number
+  ): { fits: boolean; height: number; mt: number; mb: number }
   tryAddChild(
     elOrHeight: HTMLElement | number,
     marginTop?: number,
     marginBottom?: number
-  ): boolean {
+  ): { fits: boolean; height: number; mt: number; mb: number } {
     const { height, mt, mb } = this.resolveMetrics(elOrHeight, marginTop, marginBottom)
     const newHeight = this.projectHeight(height, mt, mb)
 
-    if (newHeight > this.maxContentHeight) return false
+    if (newHeight > this.maxContentHeight) return { fits: false, height, mt, mb }
 
     this._height = newHeight
     this.lastBottomMargin = mb
     this.count++
-    return true
+    return { fits: true, height, mt, mb }
   }
 
   /**
@@ -118,17 +135,17 @@ export class DomColumnHeight {
    * with the given metrics were added.
    */
   private projectHeight(height: number, marginTop: number, marginBottom: number): number {
+    // Margin bottom collapses with context margin
+    const mb = Math.max(marginBottom, this.contextMarginBottom)
+
     if (this.count === 0) {
-      // First child: marginTop counts against the top of the container.
-      // This assumes the container establishes a BFC (overflow: hidden,
-      // display: flow-root, etc.) so marginTop does NOT collapse with
-      // the container. If your container does not establish a BFC,
-      // drop marginTop here.
-      return marginTop + height + marginBottom
+      // First child: marginTop collapses with context margin
+      const mt = Math.max(marginTop, this.contextMarginTop)
+      return mt + height + mb
     }
 
     const gap = this.collapsedGap(marginTop)
-    return this._height + gap + height + marginBottom
+    return this._height + gap + height + mb
   }
 
   /**

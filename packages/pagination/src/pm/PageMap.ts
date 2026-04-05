@@ -82,7 +82,10 @@ export class PageMap {
 
     if (!page) return
 
-    logger.log('pagemap', `setSplitBoundary: page ${pageIndex} endPos ${page.endPos} → ${newEndPos}`)
+    logger.log(
+      'pagemap',
+      `setSplitBoundary: page ${pageIndex} endPos ${page.endPos} → ${newEndPos}`
+    )
 
     page.endPos = newEndPos
     if (next) {
@@ -106,7 +109,10 @@ export class PageMap {
       this.pages[i].pageIndex = i
     }
 
-    logger.log('pagemap', `insertPageAfter ${afterIndex}: new page ${newIndex} [${startPos}..${endPos}], total: ${this.pages.length}`)
+    logger.log(
+      'pagemap',
+      `insertPageAfter ${afterIndex}: new page ${newIndex} [${startPos}..${endPos}], total: ${this.pages.length}`
+    )
     this.markDirty(newIndex)
   }
 
@@ -174,7 +180,10 @@ export class PageMap {
         const nodeEnd = $pos.end(1) + 1 // +1 to pass the closing token
 
         if (nodeEnd !== boundaryPos) {
-          logger.log('pagemap', `snapBoundaries: page ${i} endPos ${boundaryPos} → ${nodeEnd} (mid-node, snapped to node end)`)
+          logger.log(
+            'pagemap',
+            `snapBoundaries: page ${i} endPos ${boundaryPos} → ${nodeEnd} (mid-node, snapped to node end)`
+          )
           page.endPos = nodeEnd
           next.startPos = nodeEnd
           this.markDirty(i)
@@ -194,8 +203,7 @@ export class PageMap {
   rebuild(doc: PMNode, geometry: PageGeometry): void {
     this.pages = []
     this.dirty = new Set()
-
-    const col = new DomColumnHeight(geometry.contentHeight)
+    const col = DomColumnHeight.fromPageGeometry(geometry)
     let pageStart = 0
     let pageIndex = 0
 
@@ -228,7 +236,11 @@ export class PageMap {
       endPos: doc.content.size,
     })
 
-    logger.log('pagemap', `rebuild: ${this.pages.length} page(s) estimated`, this.pages.map(p => `[${p.startPos}..${p.endPos}]`))
+    logger.log(
+      'pagemap',
+      `rebuild: ${this.pages.length} page(s) estimated`,
+      this.pages.map((p) => `[${p.startPos}..${p.endPos}]`)
+    )
   }
 
   // ── Dirty tracking ─────────────────────────────────────────────────────────
