@@ -150,6 +150,12 @@ export class ReflowController {
 
     let safety = 0
     const remaining = [...dirtyPages]
+    // Only one actual doc split (tr.split) is allowed per runReflow pass.
+    // Subsequent tr.split calls would operate on stale old-doc positions because
+    // view.state and view.nodeDOM still reflect the pre-dispatch document.
+    // Block-boundary moves (moveToNextPage) only touch the PageMap so they are
+    // safe to batch; doc splits are not.
+    let docSplitDone = false
 
     while (remaining.length > 0 && safety++ < this.config.maxIterations) {
       const pageIndex = remaining.shift()!
@@ -161,10 +167,14 @@ export class ReflowController {
       const overflow = this.detectOverflow(view, page.startPos, page.endPos)
       if (!overflow) {
         logger.log('overflow', `page ${pageIndex} — no overflow`)
-        const pulled = this.tryPull(view, pageIndex, pageMap, ptx)
-        if (pulled) {
-          logger.log('overflow', `page ${pageIndex} — pulled node from next page`)
-          changed = true
+        if (!docSplitDone) {
+          // Pulling also uses DOM positions — safe to do before a doc split,
+          // but skip after one since the DOM hasn't updated yet.
+          const pulled = this.tryPull(view, pageIndex, pageMap, ptx)
+          if (pulled) {
+            logger.log('overflow', `page ${pageIndex} — pulled node from next page`)
+            changed = true
+          }
         }
         continue
       }
@@ -177,9 +187,16 @@ export class ReflowController {
         `page ${pageIndex} — overflow at pos ${overflow.nodePos} (${overflow.nodeType}), remaining: ${overflow.remainingHeight.toFixed(1)}px`
       )
 
-      const handled = this.handleOverflow(view, overflow, pageMap, ptx)
+      const handled = this.handleOverflow(view, overflow, pageMap, ptx, docSplitDone)
       if (handled) {
         changed = true
+        // If handleOverflow performed a doc split, record it and stop processing
+        // further pages — remaining dirty pages will be re-queued by the next RAF.
+        if (!docSplitDone && handled === 'split') {
+          docSplitDone = true
+          logger.log('reflow', `doc split performed on page ${pageIndex} — stopping pass to avoid stale positions`)
+          break
+        }
         remaining.push(pageIndex + 1)
       }
     }
@@ -191,18 +208,51 @@ export class ReflowController {
       )
     }
 
-    const fused = this.fuseIfNeeded(view, pageMap, ptx)
-    if (fused) {
-      logger.log('split', 'fused split fragments on same page')
-      changed = true
+    // Skip fusion when a doc split was performed — the transaction already
+    // contains a tr.split step and fuse candidates still hold pre-split
+    // positions. Running fuseNodes here would resolve stale positions against
+    // the modified doc and crash with "NodeType.create can't construct text nodes".
+    // Fusion will be re-evaluated on the next RAF pass after the split dispatches.
+    if (!docSplitDone) {
+      const fused = this.fuseIfNeeded(view, pageMap, ptx)
+      if (fused) {
+        logger.log('split', 'fused split fragments on same page')
+        changed = true
+      }
+    } else {
+      logger.log('split', 'doc split performed — skipping fuseIfNeeded this pass')
     }
 
     // Measure final page heights from DOM for accurate spacer sizing.
+    // Must happen BEFORE applyMapping below — measurePageHeights uses view.state.doc
+    // which still reflects the pre-dispatch document, so positions must match it.
     const pageHeights = this.measurePageHeights(view, pageMap)
 
-    pageMap.clearDirty()
+    if (docSplitDone) {
+      // Split performed — positions were already set in new-doc coordinates by
+      // splitParagraphAt (via tr.mapping). Leave dirty and reset debounce so the
+      // follow-up RAF continues paginating the remaining dirty pages.
+      this.lastReflowTime = 0
+      logger.log('reflow', 'doc split done — leaving dirty pages for next RAF pass (debounce reset)')
+    } else {
+      // Fuse operations (tr.join) shift positions of all subsequent nodes by -2.
+      // Apply the accumulated transaction mapping to bring pageMap in sync with
+      // the new doc that will exist after dispatch. For pure PageMap-only passes
+      // this is a no-op (identity mapping — no doc steps added to ptx.tr).
+      pageMap.applyMapping(ptx.tr.mapping)
 
-    logger.log('reflow', `runReflow done — changed: ${changed}, pages: ${pageMap.length}`)
+      if (ptx.tr.docChanged) {
+        // A fuse (or similar) changed the doc — heights were measured against the
+        // old DOM. Leave dirty pages and reset debounce so the follow-up pass
+        // remeasures against the fused document.
+        this.lastReflowTime = 0
+        logger.log('reflow', 'fuse changed doc — leaving dirty pages for remeasurement pass (debounce reset)')
+      } else {
+        pageMap.clearDirty()
+      }
+    }
+
+    logger.log('reflow', `runReflow done — changed: ${changed}, pages: ${pageMap.length}, dirty: [${pageMap.dirtyPages()}]`)
     return { correctionTr: changed ? ptx.finalize() : null, pageHeights }
   }
 
@@ -321,12 +371,14 @@ export class ReflowController {
 
   // ── Split handling ─────────────────────────────────────────────────────────
 
+  /** Returns `'split'` when a doc split was performed, `true` for a page-map-only move, `false` for no-op. */
   private handleOverflow(
     view: EditorView,
     overflow: OverflowResult,
     pageMap: PageMap,
-    ptx: PaginationTransaction
-  ): boolean {
+    ptx: PaginationTransaction,
+    _docSplitDone: boolean = false
+  ): boolean | 'split' {
     const { nodePos, nodeType, remainingHeight, pageIndex } = overflow
     const node = view.state.doc.nodeAt(nodePos)
     if (!node) return false
@@ -340,8 +392,16 @@ export class ReflowController {
         return true
       }
 
-      const pageBottom = this.getPageBottomY(view, pageIndex, pageMap)
       const parRect = domEl.getBoundingClientRect()
+
+      // Compute pageBottom from the overflowing node's DOM position and the
+      // remaining column space when overflow was detected.
+      // remainingHeight = contentHeight - accumulatedHeightBeforeThisNode
+      // → pageBottom = parRect.top + remainingHeight
+      // This is robust regardless of whether the page's first node is in the
+      // DOM (avoids getPageBottomY returning Infinity for new/off-screen pages).
+      const pageBottom = parRect.top + remainingHeight
+
       const parMb = parseFloat(getComputedStyle(domEl).marginBottom) || 0
       const mb = Math.max(parMb, this.geometry.footerMargins.inner)
       const parBottom = parRect.bottom + mb
@@ -349,7 +409,7 @@ export class ReflowController {
       const domOverflow = parBottom - pageBottom
       logger.log(
         'split',
-        `paragraph at ${nodePos} — el.top: ${parRect.top.toFixed(1)}, el.bottom: ${parBottom.toFixed(1)}, pageBottom: ${pageBottom.toFixed(1)}, overflow: ${domOverflow.toFixed(1)}px`,
+        `paragraph at ${nodePos} — el.top: ${parRect.top.toFixed(1)}, el.bottom: ${parBottom.toFixed(1)}, pageBottom: ${pageBottom.toFixed(1)} (remaining ${remainingHeight.toFixed(1)}px), overflow: ${domOverflow.toFixed(1)}px`,
         domEl
       )
 
@@ -398,7 +458,7 @@ export class ReflowController {
         'pagemap',
         `split boundary set: page ${pageIndex} endPos → ${tailPos}, tail on page ${pageIndex + 1}`
       )
-      return true
+      return 'split'
     }
 
     // ── Table: attempt row-level split ──
@@ -411,7 +471,7 @@ export class ReflowController {
       }
 
       const tableRect = domEl.getBoundingClientRect()
-      const pageBottom = this.getPageBottomY(view, pageIndex, pageMap)
+      const pageBottom = tableRect.top + remainingHeight
       if (tableRect.bottom <= pageBottom) {
         logger.log(
           'split',
@@ -446,7 +506,7 @@ export class ReflowController {
     const domEl = view.nodeDOM(nodePos) as HTMLElement | null
     if (domEl) {
       const rect = domEl.getBoundingClientRect()
-      const pageBottom = this.getPageBottomY(view, pageIndex, pageMap)
+      const pageBottom = rect.top + remainingHeight
       if (rect.bottom <= pageBottom) {
         logger.log(
           'split',
@@ -635,33 +695,6 @@ export class ReflowController {
 
   // ── Geometry helpers ───────────────────────────────────────────────────────
 
-  /**
-   * Return the absolute Y coordinate of the bottom of the content area for
-   * the given page index.
-   *
-   * In the flat/decoration model there is no page-body DOM element.
-   * We compute: top of first node on the page + contentHeight.
-   */
-  private getPageBottomY(view: EditorView, pageIndex: number, pageMap: PageMap): number {
-    const page = pageMap.getPage(pageIndex)
-    if (!page) return Infinity
-
-    const firstNodeDOM = view.nodeDOM(page.startPos) as HTMLElement | null
-    if (!firstNodeDOM) return Infinity
-
-    const rect = firstNodeDOM.getBoundingClientRect()
-    const firstNodeMt = parseFloat(getComputedStyle(firstNodeDOM).marginTop) || 0
-    const mt = Math.max(firstNodeMt, this.geometry.headerMargins.inner)
-    const pageBottom = rect.top - mt + this.geometry.contentHeight
-
-    logger.log(
-      'overflow',
-      `page ${pageIndex} bottom Y — firstNode.top: ${rect.top.toFixed(1)}, contentHeight: ${this.geometry.contentHeight}px, pageBottom: ${pageBottom.toFixed(1)}`,
-      firstNodeDOM
-    )
-
-    return pageBottom
-  }
 }
 
 // ── Cache key ─────────────────────────────────────────────────────────────────

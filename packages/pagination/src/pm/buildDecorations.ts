@@ -73,7 +73,11 @@ export function buildDecorations(
       Decoration.widget(
         page.endPos,
         () => createBreakerWidget(page.pageIndex + 1, spacerHeight, totalPages, options, geometry),
-        { side: 1, key: `page-break-${page.pageIndex}-${spacerKey}` }
+        // side: -1 ensures the widget renders BEFORE the first node of the next
+        // page (page.endPos is that node's opening-token position). side: 1 would
+        // render it inside the node, inflating its measured height and breaking
+        // the layout when paragraphs are split across pages.
+        { side: -1, key: `page-break-${page.pageIndex}-${spacerKey}` }
       )
     )
   }

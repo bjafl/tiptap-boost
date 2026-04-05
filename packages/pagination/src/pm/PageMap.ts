@@ -173,9 +173,16 @@ export class PageMap {
 
       const $pos = doc.resolve(boundaryPos)
 
-      // If we're not at a top-level node boundary (depth 0 means inside the doc,
-      // parent is doc itself at depth 1 when inside a block), snap forward.
-      if ($pos.depth > 0) {
+      // If we're not at a top-level node boundary, snap forward.
+      // A position is a valid page boundary when either:
+      //   - depth === 0 (between top-level nodes, i.e. truly at the doc level), OR
+      //   - depth === 1 AND parentOffset === 0 (exactly at the opening token of a
+      //     top-level node — this happens when moveToNextPage sets the boundary at
+      //     `nodeOffset` which is the node's opening token position).
+      // Any other depth-1+ position (parentOffset > 0) is inside a node and must
+      // be snapped to the node's end so the boundary lies between nodes.
+      const isMidNode = $pos.depth > 0 && !($pos.depth === 1 && $pos.parentOffset === 0)
+      if (isMidNode) {
         // Walk up to depth 1 (direct child of doc) and take the node's end.
         const nodeEnd = $pos.end(1) + 1 // +1 to pass the closing token
 
