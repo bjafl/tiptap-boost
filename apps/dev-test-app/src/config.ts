@@ -1,5 +1,6 @@
 import { Pagination } from '@tiptap-boost/pagination'
 import '@tiptap-boost/pagination/styles/pagination.scss'
+import '@/styles/pagination-debug.css'
 // import {
 //   TablePlus,
 //   TableRowPlus,

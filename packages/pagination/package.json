@@ -59,12 +59,8 @@
     "@types/node": "^22.19.17",
     "copyfiles": "^2.4.1",
     "jsdom": "^29.0.1",
-    "prosemirror-transform": "^1.12.0",
-    "prosemirror-view": "^1.41.8",
     "tsc-watch": "^6.3.1",
     "typescript": "^5.9.3"
   },
-  "dependencies": {
-    "@tiptap/extension-document": "^3.22.1"
-  }
+  "dependencies": {}
 }

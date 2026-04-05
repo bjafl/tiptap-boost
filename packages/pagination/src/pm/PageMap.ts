@@ -142,6 +142,52 @@ export class PageMap {
   }
 
   /**
+   * Snap page boundaries to top-level node boundaries in the new document.
+   *
+   * After `applyMapping`, a boundary position can land inside a merged node
+   * (e.g. after a join/backspace at the boundary). When that happens, the
+   * same node appears in both `nodesBetween` ranges and is double-counted
+   * during overflow detection. This method fixes that by advancing any
+   * mid-node boundary to the end of the containing top-level node.
+   *
+   * Must be called AFTER `applyMapping`.
+   */
+  snapBoundaries(doc: PMNode): boolean {
+    let snapped = false
+
+    for (let i = 0; i < this.pages.length - 1; i++) {
+      const page = this.pages[i]
+      const next = this.pages[i + 1]
+
+      // Find which top-level node (if any) contains this boundary position.
+      // Top-level nodes are direct children of doc, so offset into doc content
+      // maps directly to child index via doc.childBefore / doc.resolve.
+      const boundaryPos = page.endPos
+      if (boundaryPos <= 0 || boundaryPos >= doc.content.size) continue
+
+      const $pos = doc.resolve(boundaryPos)
+
+      // If we're not at a top-level node boundary (depth 0 means inside the doc,
+      // parent is doc itself at depth 1 when inside a block), snap forward.
+      if ($pos.depth > 0) {
+        // Walk up to depth 1 (direct child of doc) and take the node's end.
+        const nodeEnd = $pos.end(1) + 1 // +1 to pass the closing token
+
+        if (nodeEnd !== boundaryPos) {
+          logger.log('pagemap', `snapBoundaries: page ${i} endPos ${boundaryPos} → ${nodeEnd} (mid-node, snapped to node end)`)
+          page.endPos = nodeEnd
+          next.startPos = nodeEnd
+          this.markDirty(i)
+          this.markDirty(i + 1)
+          snapped = true
+        }
+      }
+    }
+
+    return snapped
+  }
+
+  /**
    * Full reconstruction from the document using `DomColumnHeight` estimates.
    * Used at initialisation and as a fallback after desync.
    */
@@ -191,8 +237,15 @@ export class PageMap {
   }
 
   /**
-   * Mark all pages touched by a transaction as dirty, plus their neighbours
-   * (a change on a page boundary can affect the page before and after).
+   * Mark all pages touched by a transaction as dirty, plus immediate neighbours.
+   *
+   * Must be called BEFORE `applyMapping` — step maps carry old positions that
+   * must be compared against old (pre-mapping) page positions.
+   *
+   * Neighbours are marked because:
+   *   - next page: an insertion on page N may push content onto page N+1.
+   *   - prev page: a deletion on page N may leave room to pull from page N-1,
+   *     or the deletion itself may have started on page N-1.
    */
   markDirtyFromTransaction(tr: Transaction): void {
     tr.steps.forEach((step) => {
@@ -203,6 +256,9 @@ export class PageMap {
             this.dirty.add(page.pageIndex)
             if (page.pageIndex + 1 < this.pages.length) {
               this.dirty.add(page.pageIndex + 1)
+            }
+            if (page.pageIndex > 0) {
+              this.dirty.add(page.pageIndex - 1)
             }
           }
         }

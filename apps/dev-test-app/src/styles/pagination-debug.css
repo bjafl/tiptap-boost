@@ -1,0 +1,14 @@
+.tb-page-breaker {
+  background-color: rgba(60, 255, 60, 0.138);
+}
+
+.tb-page-spacer::before {
+  position: relative;
+  display: block;
+  content: '';
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+  border: 1px dashed red;
+}

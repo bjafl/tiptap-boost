@@ -97,16 +97,29 @@ export function getPaginationPlugin(
         if (!tr.docChanged) return prev
 
         const pageMap = prev.pageMap
-        pageMap.applyMapping(tr.mapping)
+        // markDirtyFromTransaction must run BEFORE applyMapping:
+        // step maps use old positions, which must be compared against old page positions.
+        // After applyMapping the positions are in new coordinates and the match fails.
         pageMap.markDirtyFromTransaction(tr)
+        pageMap.applyMapping(tr.mapping)
+        // Snap any boundary that landed inside a merged node (e.g. after backspace
+        // at a page boundary). Without this a node straddles two pages and is
+        // double-counted by detectOverflow, producing no correction.
+        const snapped = pageMap.snapBoundaries(newState.doc)
         splitRegistry.applyMapping(tr.mapping)
 
-        logger.log('plugin', 'docChanged — positions mapped, dirty pages', pageMap.dirtyPages())
+        logger.log('plugin', 'docChanged — positions mapped, dirty pages', pageMap.dirtyPages(), snapped ? '(boundaries snapped)' : '')
+
+        // If snap moved any boundary, rebuild decorations so widgets appear at
+        // the correct (snapped) positions rather than the stale mapped ones.
+        const decorations = snapped
+          ? buildDecorations(newState.doc, pageMap, geometry, options)
+          : prev.decorations.map(tr.mapping, tr.doc)
 
         return {
           ...prev,
           pageMap,
-          decorations: prev.decorations.map(tr.mapping, tr.doc),
+          decorations,
         }
       },
     },

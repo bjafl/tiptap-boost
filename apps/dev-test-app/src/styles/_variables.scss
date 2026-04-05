@@ -124,10 +124,8 @@
 
   /* Shadows Light */
   --tt-shadow-elevated-md:
-    0px 16px 48px 0px rgba(17, 24, 39, 0.04),
-    0px 12px 24px 0px rgba(17, 24, 39, 0.04),
-    0px 6px 8px 0px rgba(17, 24, 39, 0.02),
-    0px 2px 3px 0px rgba(17, 24, 39, 0.02);
+    0px 16px 48px 0px rgba(17, 24, 39, 0.04), 0px 12px 24px 0px rgba(17, 24, 39, 0.04),
+    0px 6px 8px 0px rgba(17, 24, 39, 0.02), 0px 2px 3px 0px rgba(17, 24, 39, 0.02);
 
   /************************************************** 
        Radius variables 
@@ -166,8 +164,7 @@
   ::before,
   ::after {
     box-sizing: border-box;
-    transition: none var(--tt-transition-duration-default)
-      var(--tt-transition-easing-default);
+    transition: none var(--tt-transition-duration-default) var(--tt-transition-easing-default);
   }
 }
 
@@ -186,6 +183,11 @@
   --tt-selection-color: rgba(157, 138, 255, 0.2);
   --tt-card-bg-color: var(--white);
   --tt-card-border-color: var(--tt-gray-light-a-100);
+
+  /* Pagination */
+  --tb-page-editor-bg: var(--tt-gray-light-700);
+  --tb-page-bg: var(--white);
+  --tb-page-text-color: var(--black);
 }
 
 /* Global colors - Dark mode */
@@ -203,6 +205,11 @@
   --tt-shadow-elevated-md:
     0px 16px 48px 0px rgba(0, 0, 0, 0.5), 0px 12px 24px 0px rgba(0, 0, 0, 0.24),
     0px 6px 8px 0px rgba(0, 0, 0, 0.22), 0px 2px 3px 0px rgba(0, 0, 0, 0.12);
+
+  /* Pagination */
+  --tb-page-editor-bg: var(--tt-gray-dark-50);
+  --tb-page-bg: var(--tt-color-yellow-inc-5);
+  --tb-page-text-color: var(--black);
 }
 
 /* Text colors */

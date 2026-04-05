@@ -36,45 +36,45 @@ export class PaginationTransaction {
   // ── Split ──────────────────────────────────────────────────────────────────
 
   /**
-   * Split the node at `pos`, mark both halves with a new `splitId`,
-   * and register them in the `SplitRegistry`.
+   * Split the node at `splitPos` (a content position inside the node),
+   * mark both halves with a new `splitId`, and register them in the registry.
    *
-   * @param pos       The PM position inside the node to split at
-   * @param nodeAttrs The attrs of the original node (to preserve on both halves)
-   * @param pageIndex The page index the head lands on (for registry initialisation)
+   * @param splitPos  Content position inside the node where the split occurs
+   *                  (the value returned by `TextSplitFinder.toPmPos`)
+   * @param nodePos   Block position of the paragraph node itself — the position
+   *                  you would pass to `view.nodeDOM(nodePos)`.  Must NOT be a
+   *                  text/content position; must be the node's own opening position.
+   * @param nodeAttrs Attrs of the original node (preserved on both halves)
+   * @param pageIndex Page index the head lands on (for registry initialisation)
    */
-  splitParagraphAt(pos: number, nodeAttrs: Attrs, pageIndex: number = -1): SplitResult {
+  splitParagraphAt(splitPos: number, nodePos: number, nodeAttrs: Attrs, pageIndex: number = -1): SplitResult {
     const splitId = crypto.randomUUID()
-    const headPos = this.tr.mapping.map(pos - 1) // start of the node before split
 
-    this.tr.split(pos)
+    // tr.split inserts a close + open token pair at splitPos, shifting everything
+    // at splitPos and beyond by +2.
+    // Head node position is unchanged (it starts before splitPos).
+    // Tail node position = mapping.map(splitPos) = splitPos + 2.
+    this.tr.split(splitPos)
 
-    // After split, the tail node starts at the mapped position of `pos` + 1
-    const tailPos = this.tr.mapping.map(pos) + 1
+    const headNodePos = nodePos
+    const tailNodePos = this.tr.mapping.map(splitPos)
 
-    // Mark head
-    this.tr.setNodeMarkup(this.tr.mapping.map(headPos, -1), null, {
+    this.tr.setNodeMarkup(headNodePos, null, {
       ...nodeAttrs,
       splitId,
       splitPart: 'head',
     })
 
-    // Mark tail
-    this.tr.setNodeMarkup(tailPos, null, {
+    this.tr.setNodeMarkup(tailNodePos, null, {
       ...nodeAttrs,
       splitId,
       splitPart: 'tail',
     })
 
-    this.registry.register({
-      splitId,
-      splitPart: 'head',
-      pos: this.tr.mapping.map(headPos, -1),
-      pageIndex,
-    })
-    this.registry.register({ splitId, splitPart: 'tail', pos: tailPos, pageIndex: pageIndex + 1 })
+    this.registry.register({ splitId, splitPart: 'head', pos: headNodePos, pageIndex })
+    this.registry.register({ splitId, splitPart: 'tail', pos: tailNodePos, pageIndex: pageIndex + 1 })
 
-    return { headPos: this.tr.mapping.map(headPos, -1), tailPos, splitId }
+    return { headPos: headNodePos, tailPos: tailNodePos, splitId }
   }
 
   // ── Fuse ───────────────────────────────────────────────────────────────────

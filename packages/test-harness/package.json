@@ -16,8 +16,8 @@
   "dependencies": {
     "@playwright/test": "^1.59.1",
     "@tiptap-boost/tiptap-pagination-plus-plus": "workspace:*",
-    "@tiptap/core": "^3.22.1",
-    "@tiptap/starter-kit": "^3.22.1"
+    "@tiptap/core": "^3.22.2",
+    "@tiptap/starter-kit": "^3.22.2"
   },
   "devDependencies": {
     "@types/node": "^25.5.2"

@@ -15,33 +15,70 @@
 //
 // SCSS variable overrides (via @use ... with):
 //   $prefix            CSS class/var prefix  (default: 'tb-page')
-//   $page-bg           page background color (default: white)
+//   $bg           page background color (default: white)
 //   $editor-bg         editor background     (default: #252525)
 //   $border-color      border between pages  (default: #c8c8c8)
 //   $border-width      border width          (default: 1px)
 // ============================================================================
+@use 'sass:map';
 
 $prefix: 'tb-page' !default;
-$page-bg: white !default;
+$bg: white !default;
+$text-color: black !default;
 $editor-bg: #252525 !default;
 $border-color: #c8c8c8 !default;
 $border-width: 1px !default;
+$editor-padding: 20px !default;
+
+// $page-color-dark: oklch(90.606% 0.0163 64.501) !default;
+// $editor-bg-dark: black !default;
+// $text-color-dark: black !default;
+
+$defaults: (
+  bg: $bg,
+  text-color: $text-color,
+  editor-bg: $editor-bg,
+  border-color: $border-color,
+  border-width: $border-width,
+  editor-padding: $editor-padding,
+);
 
 // ── Shorthand helpers ─────────────────────────────────────────────────────────
 
 @function v($name) {
+  $fallback: map.get($defaults, $name);
+  @if $fallback {
+    @return var(--#{$prefix}-#{$name}, #{$fallback});
+  }
   @return var(--#{$prefix}-#{$name});
+}
+
+// Debug ruler
+@mixin alternating-gradient($color-a, $size-a, $color-b, $size-b) {
+  $total: calc(#{$size-a} + #{$size-b});
+  background-image: repeating-linear-gradient(
+    to bottom,
+    $color-a 0,
+    $color-a $size-a,
+    $color-b $size-a,
+    $color-b $total
+  );
 }
 
 // ── Editor wrapper ────────────────────────────────────────────────────────────
 
 // The outer element that wraps the ProseMirror editor.
 // Apply the class `tb-page-editor` to whichever container hosts the editor.
-.#{$prefix}-editor {
-  background-color: $editor-bg;
+// .#{$prefix}-editor {
+div:has(> .#{$prefix}-active) {
+  // @each $prop, $val in $defaults {
+  //   --#{$prefix}-#{$prop}: #{$val};
+  // }
+  background-color: v(editor-bg);
   width: 100%;
   height: 100%;
   overflow: auto;
+  padding: v(editor-padding);
 }
 
 // ── ProseMirror root (the editable area) ──────────────────────────────────────
@@ -52,17 +89,36 @@ $border-width: 1px !default;
   width: v(width);
   padding-left: v(margin-left);
   padding-right: v(margin-right);
-  padding-top: v(margin-top);
-  padding-bottom: v(margin-bottom);
-  background-color: $page-bg;
+  // padding-top: v(margin-top);
+  // padding-bottom: v(margin-bottom);
+  margin: 0 auto;
+  background-color: v(bg);
+  color: v(text-color);
   box-sizing: border-box;
-  margin-left: auto;
-  margin-right: auto;
-  border: $border-width solid $border-color;
+  border: v(border-width) solid v(border-color);
 
   // CSS counter for page numbers
   counter-reset: tb-page-number;
+
+  //Debug ruler
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 30px;
+    pointer-events: none;
+    @include alternating-gradient(rgb(255, 0, 0), v(height), rgb(0, 255, 0), v(gap));
+    z-index: 9999;
+  }
 }
+
+// .ProseMirror.#{$prefix}-active[data-dark],
+// .dark .ProseMirror.#{$prefix}-active  {
+//   background-color: $page-color-dark;
+//   color: $text-color-dark;
+// }
 
 // ── Page break widget ─────────────────────────────────────────────────────────
 
@@ -95,9 +151,9 @@ $border-width: 1px !default;
 .#{$prefix}-gap {
   display: block;
   height: v(gap);
-  background-color: $editor-bg;
-  border-top: $border-width solid $border-color;
-  border-bottom: $border-width solid $border-color;
+  background-color: v(editor-bg);
+  border-top: v(border-width) solid v(border-color);
+  border-bottom: v(border-width) solid v(border-color);
 }
 
 // ── Header & footer ───────────────────────────────────────────────────────────
