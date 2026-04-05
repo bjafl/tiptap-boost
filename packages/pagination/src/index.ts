@@ -9,4 +9,6 @@ export type {
   PageSize,
   PageSizePreset,
   PageMargins,
+  HeaderFooterContent,
+  HeaderFooterSlot,
 } from './types'

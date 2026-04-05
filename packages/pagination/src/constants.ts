@@ -31,6 +31,12 @@ export const DEFAULT_OPTIONS: PaginationOptions = {
   pageGap: 40,
   headerHeight: 0,
   footerHeight: 0,
+  header: null,
+  footer: null,
+  headerMarginOuter: 0,
+  headerMarginInner: 0,
+  footerMarginInner: 0,
+  footerMarginOuter: 0,
   cssClassPrefix: 'tb-page',
 }
 

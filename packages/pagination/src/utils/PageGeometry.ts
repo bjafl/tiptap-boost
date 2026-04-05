@@ -1,6 +1,6 @@
 import { CSSLength } from './CSSLength'
 import { PAGE_SIZES } from '../constants'
-import type { PaginationOptions, PageSize, PageMargins } from '../types'
+import type { PaginationOptions, PageSize } from '../types'
 
 /**
  * Resolves page dimensions and content area from `PaginationOptions`.
@@ -16,6 +16,10 @@ export class PageGeometry {
   readonly margins: { top: number; right: number; bottom: number; left: number }
   readonly headerHeight: number
   readonly footerHeight: number
+  /** Resolved padding values for the header container (px). */
+  readonly headerMargins: { outer: number; inner: number }
+  /** Resolved padding values for the footer container (px). */
+  readonly footerMargins: { outer: number; inner: number }
 
   constructor(options: PaginationOptions) {
     const { w, h } = resolvePageSize(options.pageSize, options.orientation)
@@ -28,6 +32,15 @@ export class PageGeometry {
       right: toPx(options.margins.right),
       bottom: toPx(options.margins.bottom),
       left: toPx(options.margins.left),
+    }
+
+    this.headerMargins = {
+      outer: toPx(options.headerMarginOuter),
+      inner: toPx(options.headerMarginInner),
+    }
+    this.footerMargins = {
+      outer: toPx(options.footerMarginOuter),
+      inner: toPx(options.footerMarginInner),
     }
 
     this.headerHeight = options.headerHeight

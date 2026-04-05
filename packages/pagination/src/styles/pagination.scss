@@ -158,16 +158,50 @@ div:has(> .#{$prefix}-active) {
 
 // ── Header & footer ───────────────────────────────────────────────────────────
 
-// Height is set inline from options.headerHeight / options.footerHeight.
-// pointer-events: auto so the header/footer remain clickable even though the
-// parent breaker has pointer-events: none.
+// Containers span the full page width (margins are set inline to break out of
+// the content padding). Vertical padding and min-height are set inline.
+// pointer-events: auto so content remains clickable even though the parent
+// breaker widget has pointer-events: none.
 .#{$prefix}-header,
 .#{$prefix}-footer {
-  display: flex;
-  align-items: center;
-  overflow: hidden;
+  display: block;
+  box-sizing: border-box;
   pointer-events: auto;
   cursor: default;
+  overflow: hidden;
+}
+
+// Three-column inner wrapper — fills all available height.
+.#{$prefix}-header-cols,
+.#{$prefix}-footer-cols {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+// Individual columns — each takes equal share of the width.
+// When a column is empty it still occupies its flex slot so the layout stays
+// balanced (left/center/right always line up with page thirds).
+.#{$prefix}-header-left,
+.#{$prefix}-footer-left {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+}
+
+.#{$prefix}-header-center,
+.#{$prefix}-footer-center {
+  flex: 1;
+  text-align: center;
+  overflow: hidden;
+}
+
+.#{$prefix}-header-right,
+.#{$prefix}-footer-right {
+  flex: 1;
+  text-align: right;
+  overflow: hidden;
 }
 
 // ── Split node markers ────────────────────────────────────────────────────────

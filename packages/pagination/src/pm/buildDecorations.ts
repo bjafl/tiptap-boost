@@ -30,7 +30,7 @@ export function buildDecorations(
   doc: PMNode,
   pageMap: PageMap,
   geometry: PageGeometry,
-  options: Pick<PaginationOptions, 'pageGap' | 'headerHeight' | 'footerHeight' | 'cssClassPrefix'>,
+  options: Pick<PaginationOptions, 'pageGap' | 'headerHeight' | 'footerHeight' | 'header' | 'footer' | 'cssClassPrefix'>,
   accumulatedHeights?: Map<number, number>
 ): DecorationSet {
   const pages = pageMap.allPages()
@@ -44,7 +44,7 @@ export function buildDecorations(
     Decoration.widget(
       0,
       () =>
-        createBreakerWidget(0, 0, totalPages, options),
+        createBreakerWidget(0, 0, totalPages, options, geometry),
       { side: -1, key: 'page-header-0' }
     )
   )
@@ -62,7 +62,7 @@ export function buildDecorations(
     decorations.push(
       Decoration.widget(
         page.endPos,
-        () => createBreakerWidget(page.pageIndex + 1, spacerHeight, totalPages, options),
+        () => createBreakerWidget(page.pageIndex + 1, spacerHeight, totalPages, options, geometry),
         { side: 1, key: `page-break-${page.pageIndex}` }
       )
     )

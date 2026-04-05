@@ -61,7 +61,16 @@ export const EDITOR_OPTIONS: UseEditorOptions = {
       upload: handleImageUpload,
       onError: (error) => console.error('Upload failed:', error),
     }),
-    Pagination.configure({}),
+    Pagination.configure({
+      header: {
+        left: (page, total) => `Page ${page} of ${total}`,
+        center: '<strong>My Document</strong>',
+        right: null,
+      },
+      headerMarginOuter: '5mm',
+      headerMarginInner: '3mm',
+      footer: { center: (page) => `${page}` },
+    }),
     // TablePlus,
     // TableRowPlus,
     // TableCellPlus,
