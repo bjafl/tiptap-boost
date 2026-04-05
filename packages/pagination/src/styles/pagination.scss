@@ -1,0 +1,149 @@
+// ============================================================================
+// @tiptap-boost/pagination — page layout styles
+//
+// CSS variables (set on the .ProseMirror element by the plugin):
+//   --tb-page-width          total page width in px
+//   --tb-page-height         total page height in px
+//   --tb-page-margin-top     top margin in px
+//   --tb-page-margin-right   right margin in px
+//   --tb-page-margin-bottom  bottom margin in px
+//   --tb-page-margin-left    left margin in px
+//   --tb-page-content-width  content area width in px
+//   --tb-page-content-height content area height in px
+//   --tb-page-gap            gap between pages in px
+//   --tb-page-count          total page count (integer)
+//
+// SCSS variable overrides (via @use ... with):
+//   $prefix            CSS class/var prefix  (default: 'tb-page')
+//   $page-bg           page background color (default: white)
+//   $editor-bg         editor background     (default: #252525)
+//   $border-color      border between pages  (default: #c8c8c8)
+//   $border-width      border width          (default: 1px)
+// ============================================================================
+
+$prefix: 'tb-page' !default;
+$page-bg: white !default;
+$editor-bg: #252525 !default;
+$border-color: #c8c8c8 !default;
+$border-width: 1px !default;
+
+// ── Shorthand helpers ─────────────────────────────────────────────────────────
+
+@function v($name) {
+  @return var(--#{$prefix}-#{$name});
+}
+
+// ── Editor wrapper ────────────────────────────────────────────────────────────
+
+// The outer element that wraps the ProseMirror editor.
+// Apply the class `tb-page-editor` to whichever container hosts the editor.
+.#{$prefix}-editor {
+  background-color: $editor-bg;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+}
+
+// ── ProseMirror root (the editable area) ──────────────────────────────────────
+
+// Page width and horizontal padding are set via CSS vars so changing pageSize
+// in options automatically resizes the editor without JS style mutations.
+.ProseMirror.#{$prefix}-active {
+  width: v(width);
+  padding-left: v(margin-left);
+  padding-right: v(margin-right);
+  padding-top: v(margin-top);
+  padding-bottom: v(margin-bottom);
+  background-color: $page-bg;
+  box-sizing: border-box;
+  margin-left: auto;
+  margin-right: auto;
+  border: $border-width solid $border-color;
+
+  // CSS counter for page numbers
+  counter-reset: tb-page-number;
+}
+
+// ── Page break widget ─────────────────────────────────────────────────────────
+
+// The container wraps: spacer + footer + gap + header.
+// Negative margins break out of the horizontal padding so the widget spans
+// the full page width (same technique as the old plugin).
+.#{$prefix}-breaker {
+  display: block;
+  width: v(width);
+  margin-left: calc(-1 * v(margin-left));
+  margin-right: calc(-1 * v(margin-right));
+  pointer-events: none;
+  user-select: none;
+
+  // Increment counter at each break so CSS page numbers work
+  counter-increment: tb-page-number;
+}
+
+// ── Spacer ────────────────────────────────────────────────────────────────────
+
+// Fills the remaining content area below the last node on a page.
+// Height is set inline by the plugin.
+.#{$prefix}-spacer {
+  display: block;
+}
+
+// ── Gap ───────────────────────────────────────────────────────────────────────
+
+// Visual separator between pages. Height driven by --tb-page-gap CSS var.
+.#{$prefix}-gap {
+  display: block;
+  height: v(gap);
+  background-color: $editor-bg;
+  border-top: $border-width solid $border-color;
+  border-bottom: $border-width solid $border-color;
+}
+
+// ── Header & footer ───────────────────────────────────────────────────────────
+
+// Height is set inline from options.headerHeight / options.footerHeight.
+// pointer-events: auto so the header/footer remain clickable even though the
+// parent breaker has pointer-events: none.
+.#{$prefix}-header,
+.#{$prefix}-footer {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  pointer-events: auto;
+  cursor: default;
+}
+
+// ── Split node markers ────────────────────────────────────────────────────────
+
+// Remove visual seams between split fragments of the same logical node.
+[data-split-part='head'] {
+  margin-bottom: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+[data-split-part='tail'],
+[data-split-part='mid'] {
+  text-indent: 0 !important;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+// ── CSS page number helper ────────────────────────────────────────────────────
+
+// Add <span class="tb-page-number"></span> inside a header/footer to render
+// the current page number via CSS counter.
+.#{$prefix}-number::before {
+  content: counter(tb-page-number);
+}
+
+// ── ProseMirror: trailing break fix ──────────────────────────────────────────
+
+// Ensures empty paragraphs (trailing <br>) occupy a full line height so
+// DomColumnHeight measures them correctly.
+.ProseMirror.#{$prefix}-active {
+  *:has(> br.ProseMirror-trailingBreak:only-child) {
+    display: table;
+    width: 100%;
+  }
+}

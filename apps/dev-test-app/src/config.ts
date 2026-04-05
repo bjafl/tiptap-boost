@@ -1,11 +1,11 @@
-import { PaginationPlus } from '@tiptap-boost/tiptap-pagination-plus-plus'
-import '@tiptap-boost/tiptap-pagination-plus-plus/styles/pagination.scss'
-import {
-  TablePlus,
-  TableRowPlus,
-  TableCellPlus,
-  TableHeaderPlus,
-} from '@tiptap-boost/tiptap-table-plus-plus'
+import { Pagination } from '@tiptap-boost/pagination'
+import '@tiptap-boost/pagination/styles/pagination.scss'
+// import {
+//   TablePlus,
+//   TableRowPlus,
+//   TableCellPlus,
+//   TableHeaderPlus,
+// } from '@tiptap-boost/tiptap-table-plus-plus'
 import HorizontalRule from '@tiptap/extension-horizontal-rule'
 import { TaskList, TaskItem } from '@tiptap/extension-list'
 import Subscript from '@tiptap/extension-subscript'
@@ -20,6 +20,9 @@ import { Highlight } from '@tiptap/extension-highlight'
 import { Image } from '@tiptap/extension-image'
 import { Selection } from '@tiptap/extensions'
 import type { UseEditorOptions } from '@tiptap/react'
+import { logger as paginationLogger } from '@tiptap-boost/pagination'
+
+paginationLogger.enable()
 
 export const EDITOR_OPTIONS: UseEditorOptions = {
   immediatelyRender: false,
@@ -57,32 +60,11 @@ export const EDITOR_OPTIONS: UseEditorOptions = {
       upload: handleImageUpload,
       onError: (error) => console.error('Upload failed:', error),
     }),
-    PaginationPlus.configure({
-      pageSize: {
-        height: '297mm',
-        width: '210mm',
-      },
-      pageMargins: {
-        top: '25mm',
-        bottom: '25mm',
-        left: '25mm',
-        right: '25mm',
-      },
-      header: {
-        left: 'Header Left - Page {page}',
-        center: 'Header Center - Page {page}',
-        right: 'Header Right - Page {page}',
-      },
-      footer: {
-        left: 'Footer Left - Page {page}',
-        center: 'Footer Center - Page {page}',
-        right: 'Footer Right - Page {page}',
-      },
-    }),
-    TablePlus,
-    TableRowPlus,
-    TableCellPlus,
-    TableHeaderPlus,
+    Pagination.configure({}),
+    // TablePlus,
+    // TableRowPlus,
+    // TableCellPlus,
+    // TableHeaderPlus,
   ],
   content: LOREM_IPSUM,
 }

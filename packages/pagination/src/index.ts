@@ -1,11 +1,12 @@
-import { PaginationPlus } from './Pagination'
-import type { PaginationPlusStorage, PageSize, PageNumber, Margins, HeaderOrFooter } from './types'
+import { Pagination } from './Pagination'
 
-declare module '@tiptap/core' {
-  interface Commands<ReturnType> {
-    
-}
-
-export { PaginationPlus }
+export { Pagination }
+export { logger } from './utils/logger'
 export { PAGE_SIZES } from './constants'
-export type * from './types'
+export type {
+  PaginationOptions,
+  PaginationStorage,
+  PageSize,
+  PageSizePreset,
+  PageMargins,
+} from './types'

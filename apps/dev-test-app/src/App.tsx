@@ -1,7 +1,7 @@
 import { EDITOR_OPTIONS } from './config'
 import { SimpleEditor } from './Editor'
 import { EditorContextProvider } from './EditorContext'
-import { Tests } from './Tests'
+// import { Tests } from './Tests'
 
 export default function App() {
   return (
@@ -20,7 +20,7 @@ export default function App() {
         <div
           style={{ display: 'flex', flexDirection: 'column', minWidth: '200px', padding: '16px' }}
         >
-          <Tests />
+          {/* <Tests /> */}
         </div>
       </div>
     </EditorContextProvider>

@@ -51,20 +51,20 @@
     "directory": "packages/tiptap-pagination-plus-plus"
   },
   "peerDependencies": {
-    "@tiptap/core": "^2.0.0 || ^3.0.0",
-    "@tiptap/pm": "^2.0.0 || ^3.0.0"
+    "@tiptap/core": "^3.22.1",
+    "@tiptap/pm": "^3.22.1"
   },
   "devDependencies": {
-    "@playwright/test": "^1.58.2",
-    "@tiptap/core": "^3.21.0",
-    "@tiptap/pm": "^3.21.0",
-    "@types/node": "^22.15.2",
+    "@playwright/test": "^1.59.1",
+    "@types/node": "^22.19.17",
     "copyfiles": "^2.4.1",
     "jsdom": "^29.0.1",
-    "tsc-watch": "^6.0.4",
-    "typescript": "^5.8.3"
+    "prosemirror-transform": "^1.12.0",
+    "prosemirror-view": "^1.41.8",
+    "tsc-watch": "^6.3.1",
+    "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@tiptap/extension-document": "^3.21.0"
+    "@tiptap/extension-document": "^3.22.1"
   }
 }
