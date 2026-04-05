@@ -1,12 +1,13 @@
-import type { PageSizePreset, PageMargins, PaginationOptions } from './types'
+import type { PageSizePreset, PageMargins, PaginationOptions, CSSLengthValue } from './types'
 
 // ── Page size presets (in mm) ─────────────────────────────────────────────────
 
-export const PAGE_SIZES: Record<PageSizePreset, { width: string; height: string }> = {
-  A4: { width: '210mm', height: '297mm' },
-  Letter: { width: '215.9mm', height: '279.4mm' },
-  Legal: { width: '215.9mm', height: '355.6mm' },
-}
+export const PAGE_SIZES: Record<PageSizePreset, { width: CSSLengthValue; height: CSSLengthValue }> =
+  {
+    A4: { width: '210mm', height: '297mm' },
+    Letter: { width: '215.9mm', height: '279.4mm' },
+    Legal: { width: '215.9mm', height: '355.6mm' },
+  }
 
 // ── Default config ────────────────────────────────────────────────────────────
 

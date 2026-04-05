@@ -28,19 +28,19 @@ export class PageGeometry {
     this.pageHeight = h
 
     this.margins = {
-      top: toPx(options.margins.top),
-      right: toPx(options.margins.right),
-      bottom: toPx(options.margins.bottom),
-      left: toPx(options.margins.left),
+      top: CSSLength.toPx(options.margins.top),
+      right: CSSLength.toPx(options.margins.right),
+      bottom: CSSLength.toPx(options.margins.bottom),
+      left: CSSLength.toPx(options.margins.left),
     }
 
     this.headerMargins = {
-      outer: toPx(options.headerMarginOuter),
-      inner: toPx(options.headerMarginInner),
+      outer: CSSLength.toPx(options.headerMarginOuter),
+      inner: CSSLength.toPx(options.headerMarginInner),
     }
     this.footerMargins = {
-      outer: toPx(options.footerMarginOuter),
-      inner: toPx(options.footerMarginInner),
+      outer: CSSLength.toPx(options.footerMarginOuter),
+      inner: CSSLength.toPx(options.footerMarginInner),
     }
 
     this.headerHeight = options.headerHeight
@@ -76,10 +76,6 @@ export class PageGeometry {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function toPx(value: string | number): number {
-  return CSSLength.parse(value).toPx()
-}
-
 function resolvePageSize(
   pageSize: PageSize,
   orientation: 'portrait' | 'landscape'
@@ -89,11 +85,11 @@ function resolvePageSize(
 
   if (typeof pageSize === 'string') {
     const preset = PAGE_SIZES[pageSize]
-    w = toPx(preset.width)
-    h = toPx(preset.height)
+    w = CSSLength.toPx(preset.width)
+    h = CSSLength.toPx(preset.height)
   } else {
-    w = toPx(pageSize.width)
-    h = toPx(pageSize.height)
+    w = CSSLength.toPx(pageSize.width)
+    h = CSSLength.toPx(pageSize.height)
   }
 
   if (orientation === 'landscape') {

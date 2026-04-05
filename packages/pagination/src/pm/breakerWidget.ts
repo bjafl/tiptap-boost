@@ -30,10 +30,13 @@ export function createBreakerWidget(
   pageIndex: number,
   spacerHeight: number,
   totalPages: number,
-  options: Pick<PaginationOptions, 'pageGap' | 'headerHeight' | 'footerHeight' | 'header' | 'footer' | 'cssClassPrefix'>,
+  options: Pick<
+    PaginationOptions,
+    'pageGap' | 'headerHeight' | 'footerHeight' | 'header' | 'footer' | 'cssClassPrefix'
+  >,
   geometry: PageGeometry
 ): HTMLElement {
-  const isFirst = pageIndex === 0      // widget before page 1 content (header only)
+  const isFirst = pageIndex === 0 // widget before page 1 content (header only)
   const isLast = pageIndex === totalPages // widget after last page content (footer + spacer only)
 
   const container = document.createElement('div')
@@ -61,8 +64,7 @@ export function createBreakerWidget(
       geometry.margins.bottom,
       geometry.footerMargins.inner,
       geometry.footerMargins.outer,
-      geometry.margins.left,
-      geometry.margins.right
+      geometry.footerMargins.outer
     )
     footer.dataset.pageIndex = String(pageIndex - 1)
     container.appendChild(footer)
@@ -87,8 +89,7 @@ export function createBreakerWidget(
       geometry.margins.top,
       geometry.headerMargins.outer,
       geometry.headerMargins.inner,
-      geometry.margins.left,
-      geometry.margins.right
+      geometry.headerMargins.outer
     )
     header.dataset.pageIndex = String(pageIndex)
     container.appendChild(header)
@@ -128,20 +129,18 @@ function buildHeaderFooter(
   pageMargin: number,
   paddingTop: number,
   paddingBottom: number,
-  marginLeft: number,
-  marginRight: number
+  paddingX: number
 ): HTMLElement {
   const el = document.createElement('div')
   el.className = className
 
-  // Break out of the content area's horizontal padding so the container
-  // spans the full page width.
-  el.style.marginLeft = `${-marginLeft}px`
-  el.style.marginRight = `${-marginRight}px`
-
   // Vertical padding provides spacing from page edge and content area.
   el.style.paddingTop = `${paddingTop}px`
   el.style.paddingBottom = `${paddingBottom}px`
+
+  // Horizontal padding
+  el.style.paddingLeft = `${paddingX}px`
+  el.style.paddingRight = `${paddingX}px`
 
   // Always reserve at least the page margin height (plus any extra).
   el.style.minHeight = `${pageMargin + extraHeight}px`

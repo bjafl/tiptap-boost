@@ -63,9 +63,9 @@ export const EDITOR_OPTIONS: UseEditorOptions = {
     }),
     Pagination.configure({
       header: {
-        left: (page, total) => `Page ${page} of ${total}`,
+        right: (page, total) => `Page ${page} of ${total}`,
         center: '<strong>My Document</strong>',
-        right: null,
+        left: null,
       },
       headerMarginOuter: '5mm',
       headerMarginInner: '3mm',

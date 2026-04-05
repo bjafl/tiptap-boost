@@ -77,8 +77,10 @@ export function getPaginationPlugin(
         const newPageMap: PageMap | undefined = tr.getMeta(META.pages)
         if (newPageMap !== undefined) {
           splitRegistry.syncPageIndexes(newPageMap)
+          const heightsCorrection = tr.getMeta(META.correction) as Map<number, number> | undefined
           logger.log('plugin', 'PAGES_META — applying corrected PageMap', {
             pages: newPageMap.length,
+            heightsCorrection: heightsCorrection ? Object.fromEntries(heightsCorrection) : null,
           })
           return {
             ...prev,
@@ -88,7 +90,7 @@ export function getPaginationPlugin(
               newPageMap,
               geometry,
               options,
-              tr.getMeta(META.correction) as Map<number, number> | undefined
+              heightsCorrection
             ),
           }
         }
@@ -108,13 +110,27 @@ export function getPaginationPlugin(
         const snapped = pageMap.snapBoundaries(newState.doc)
         splitRegistry.applyMapping(tr.mapping)
 
-        logger.log('plugin', 'docChanged — positions mapped, dirty pages', pageMap.dirtyPages(), snapped ? '(boundaries snapped)' : '')
+        logger.log(
+          'plugin',
+          'docChanged — positions mapped, dirty pages',
+          pageMap.dirtyPages(),
+          snapped ? '(boundaries snapped)' : ''
+        )
 
         // If snap moved any boundary, rebuild decorations so widgets appear at
         // the correct (snapped) positions rather than the stale mapped ones.
         const decorations = snapped
           ? buildDecorations(newState.doc, pageMap, geometry, options)
           : prev.decorations.map(tr.mapping, tr.doc)
+
+        // Dbug check
+        if (snapped) {
+          const corrected = tr.getMeta(META.correction) as Map<number, number> | undefined
+          logger.log('plugin', 'after snapBoundaries:', {
+            metaCorrection: corrected ? Object.fromEntries(corrected) : null,
+            heightCache: Object.fromEntries(prev.heightCache),
+          })
+        }
 
         return {
           ...prev,

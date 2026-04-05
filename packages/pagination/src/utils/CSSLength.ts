@@ -128,6 +128,10 @@ export class CSSLength {
     }
   }
 
+  static toPx(input: CSSLengthValue, context?: CSSLengthContext): number {
+    return CSSLength.parse(input).toPx(context)
+  }
+
   mul(factor: number): CSSLength {
     return new CSSLength(this.value * factor, this.unit)
   }
