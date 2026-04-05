@@ -140,7 +140,18 @@ export class PaginationTransaction {
   moveToNextPage(nodePos: number, pageMap: PageMap): void {
     const pageIdx = pageMap.pageIndexForPos(nodePos)
     if (pageIdx === -1) return
+
+    const page = pageMap.getPage(pageIdx)
+    if (!page) return
+
+    const oldEndPos = page.endPos
     pageMap.setSplitBoundary(pageIdx, nodePos)
+
+    // If this was the last page, content from nodePos to oldEndPos has no
+    // page to land on — insert a new page to absorb it.
+    if (!pageMap.getPage(pageIdx + 1)) {
+      pageMap.insertPageAfter(pageIdx, nodePos, oldEndPos)
+    }
   }
 
   /**

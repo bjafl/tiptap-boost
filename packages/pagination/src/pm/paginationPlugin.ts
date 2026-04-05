@@ -179,18 +179,22 @@ export function getPaginationPlugin(
 
             logger.log('reflow', 'RAF fired — dirty pages', state.pageMap.dirtyPages())
 
-            const correctionTr = reflowController.onViewUpdate(
+            const { correctionTr, pageHeights } = reflowController.onViewUpdate(
               view,
               state.pageMap,
               state.heightCache
             )
 
-            if (correctionTr) {
-              logger.log('reflow', 'dispatching correction transaction')
-              correctionTr.setMeta(META.pages, state.pageMap)
-              view.dispatch(correctionTr)
+            if (pageHeights) {
+              // Always dispatch to carry updated page heights for accurate spacers,
+              // even when no structural correction was needed.
+              const tr = correctionTr ?? view.state.tr
+              tr.setMeta(META.pages, state.pageMap)
+              tr.setMeta(META.correction, pageHeights)
+              logger.log('reflow', correctionTr ? 'dispatching correction + heights' : 'dispatching heights only')
+              view.dispatch(tr)
             } else {
-              logger.log('reflow', 'no correction needed')
+              logger.log('reflow', 'debounced — no dispatch')
             }
           })
         },

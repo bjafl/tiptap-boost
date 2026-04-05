@@ -11,6 +11,13 @@ import { PaginationTransaction } from './PaginationTransaction'
 import { PageMap } from './PageMap'
 import { logger } from '../utils/logger'
 
+export interface ReflowResult {
+  /** Structural correction transaction, or null if no splits/moves were needed. */
+  correctionTr: Transaction | null
+  /** DOM-measured accumulated content height per page index, or null if debounced. */
+  pageHeights: Map<number, number> | null
+}
+
 interface OverflowResult {
   pageIndex: number
   nodePos: number
@@ -56,14 +63,15 @@ export class ReflowController {
 
   /**
    * Called from `view.update()`. Debounced by `config.debounceMs`.
-   * Returns a transaction to dispatch (or null if nothing to do).
+   * Always returns a result so the caller can update spacer decorations even
+   * when no structural changes occurred.
    */
-  onViewUpdate(view: EditorView, pageMap: PageMap, heightCache: HeightCache): Transaction | null {
+  onViewUpdate(view: EditorView, pageMap: PageMap, heightCache: HeightCache): ReflowResult {
     const now = Date.now()
     const elapsed = now - this.lastReflowTime
     if (elapsed < this.config.debounceMs) {
       logger.log('reflow', `debounced (${elapsed}ms < ${this.config.debounceMs}ms)`)
-      return null
+      return { correctionTr: null, pageHeights: null }
     }
 
     return this.runReflow(view, pageMap, heightCache)
@@ -72,7 +80,7 @@ export class ReflowController {
   /**
    * Bypass debounce — used after paste or forced reflow (e.g. resize).
    */
-  forceReflow(view: EditorView, pageMap: PageMap, heightCache: HeightCache): Transaction | null {
+  forceReflow(view: EditorView, pageMap: PageMap, heightCache: HeightCache): ReflowResult {
     return this.runReflow(view, pageMap, heightCache)
   }
 
@@ -122,7 +130,7 @@ export class ReflowController {
     view: EditorView,
     pageMap: PageMap,
     heightCache: HeightCache
-  ): Transaction | null {
+  ): ReflowResult {
     this.lastReflowTime = Date.now()
 
     const tr = view.state.tr
@@ -177,10 +185,13 @@ export class ReflowController {
       changed = true
     }
 
+    // Measure final page heights from DOM for accurate spacer sizing.
+    const pageHeights = this.measurePageHeights(view, pageMap)
+
     pageMap.clearDirty()
 
     logger.log('reflow', `runReflow done — changed: ${changed}, pages: ${pageMap.length}`)
-    return changed ? ptx.finalize() : null
+    return { correctionTr: changed ? ptx.finalize() : null, pageHeights }
   }
 
   // ── Overflow detection ─────────────────────────────────────────────────────
@@ -370,34 +381,57 @@ export class ReflowController {
     pageMap: PageMap,
     ptx: PaginationTransaction
   ): boolean {
-    const page = pageMap.getPage(pageIndex)
-    const nextPage = pageMap.getPage(pageIndex + 1)
-    if (!page || !nextPage) return false
-
-    const firstNodePos = nextPage.startPos
-    const firstNodeDOM = view.nodeDOM(firstNodePos) as HTMLElement | null
-    if (!firstNodeDOM) return false
-
-    const col = new DomColumnHeight(this.geometry.contentHeight)
-
     const { doc } = view.state
-    doc.nodesBetween(page.startPos, page.endPos, (node, pos) => {
-      if (!node.isBlock || node === doc) return true
-      const domEl = view.nodeDOM(pos) as HTMLElement | null
-      if (domEl) col.tryAddChild(domEl)
-      return false
-    })
+    let pulled = false
 
-    const peek = col.peekChild(firstNodeDOM)
+    // Loop: keep pulling nodes from the next page as long as they fit.
+    // Each iteration re-reads the next page because its startPos advances
+    // after each pull (and the page may be removed when emptied).
+    while (true) {
+      const page = pageMap.getPage(pageIndex)
+      const nextPage = pageMap.getPage(pageIndex + 1)
+      if (!page || !nextPage) break
 
-    logger.log('overflow', `page ${pageIndex} pull check — accumulated: ${col.height.toFixed(1)}px, remaining: ${col.remaining.toFixed(1)}px, candidate h: ${peek.elementHeight.toFixed(1)}px, fits: ${peek.fits}`,
-      firstNodeDOM
-    )
+      // Stop if next page is empty (shouldn't happen normally, but guard anyway).
+      if (nextPage.startPos >= nextPage.endPos) {
+        pageMap.removePage(pageIndex + 1)
+        logger.log('overflow', `page ${pageIndex + 1} became empty after pull — removed`)
+        break
+      }
 
-    if (!peek.fits) return false
+      const firstNodePos = nextPage.startPos
+      const firstNodeDOM = view.nodeDOM(firstNodePos) as HTMLElement | null
+      if (!firstNodeDOM) break
 
-    ptx.pullFromNextPage(pageIndex, pageMap)
-    return true
+      // Re-accumulate current page height (boundary may have moved in previous iteration).
+      const col = new DomColumnHeight(this.geometry.contentHeight)
+      doc.nodesBetween(page.startPos, page.endPos, (node, pos) => {
+        if (!node.isBlock || node === doc) return true
+        const domEl = view.nodeDOM(pos) as HTMLElement | null
+        if (domEl) col.tryAddChild(domEl)
+        return false
+      })
+
+      const peek = col.peekChild(firstNodeDOM)
+      logger.log('overflow', `page ${pageIndex} pull check — accumulated: ${col.height.toFixed(1)}px, remaining: ${col.remaining.toFixed(1)}px, candidate h: ${peek.elementHeight.toFixed(1)}px, fits: ${peek.fits}`,
+        firstNodeDOM
+      )
+
+      if (!peek.fits) break
+
+      ptx.pullFromNextPage(pageIndex, pageMap)
+      pulled = true
+
+      // If the next page was just emptied, remove it and stop.
+      const updatedNext = pageMap.getPage(pageIndex + 1)
+      if (updatedNext && updatedNext.startPos >= updatedNext.endPos) {
+        pageMap.removePage(pageIndex + 1)
+        logger.log('overflow', `page ${pageIndex + 1} became empty after pull — removed`)
+        break
+      }
+    }
+
+    return pulled
   }
 
   // ── Fusion ────────────────────────────────────────────────────────────────
@@ -461,6 +495,31 @@ export class ReflowController {
     }
 
     logger.log('reflow', `height cache: ${measured} node(s) measured, total entries: ${heightCache.size}`)
+  }
+
+  /**
+   * Measure accumulated DOM content height for every page in the map.
+   * Returns a Map<pageIndex, contentHeightPx> used by buildDecorations to
+   * compute accurate spacer heights.
+   */
+  private measurePageHeights(view: EditorView, pageMap: PageMap): Map<number, number> {
+    const { doc } = view.state
+    const result = new Map<number, number>()
+
+    for (const page of pageMap.allPages()) {
+      const col = new DomColumnHeight(Infinity)
+
+      doc.nodesBetween(page.startPos, page.endPos, (node, pos) => {
+        if (!node.isBlock || node === doc) return true
+        const domEl = view.nodeDOM(pos) as HTMLElement | null
+        if (domEl) col.tryAddChild(domEl)
+        return false
+      })
+
+      result.set(page.pageIndex, col.height)
+    }
+
+    return result
   }
 
   // ── Geometry helpers ───────────────────────────────────────────────────────
