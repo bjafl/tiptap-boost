@@ -45,7 +45,7 @@ export function buildDecorations(
       0,
       () =>
         createBreakerWidget(0, 0, totalPages, options, geometry),
-      { side: -1, key: 'page-header-0' }
+      { side: -1, key: `page-header-0-${totalPages}` }
     )
   )
 
@@ -59,11 +59,14 @@ export function buildDecorations(
 
     // The widget is placed after the last node on this page.
     // `side: 1` means it renders after any content at the same position.
+    // Include spacerHeight in the key so ProseMirror replaces the DOM node
+    // whenever the spacer changes (same key = reuse, wrong height stays in DOM).
+    const spacerKey = Math.round(Math.max(0, spacerHeight))
     decorations.push(
       Decoration.widget(
         page.endPos,
         () => createBreakerWidget(page.pageIndex + 1, spacerHeight, totalPages, options, geometry),
-        { side: 1, key: `page-break-${page.pageIndex}` }
+        { side: 1, key: `page-break-${page.pageIndex}-${spacerKey}` }
       )
     )
   }

@@ -137,6 +137,14 @@ div:has(> .#{$prefix}-active) {
   counter-increment: tb-page-number;
 }
 
+// Collapse margins for top/bottom nodes adjacent to the breaker so spacing is consistent regardless
+// *:has(+ .#{$prefix}-breaker) {
+//   margin-bottom: 0;
+// }
+// .#{$prefix}-breaker + * {
+//   margin-top: 0;
+// }
+
 // ── Spacer ────────────────────────────────────────────────────────────────────
 
 // Fills the remaining content area below the last node on a page.

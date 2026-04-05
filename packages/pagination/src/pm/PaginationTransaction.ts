@@ -50,14 +50,22 @@ export class PaginationTransaction {
   splitParagraphAt(splitPos: number, nodePos: number, nodeAttrs: Attrs, pageIndex: number = -1): SplitResult {
     const splitId = crypto.randomUUID()
 
-    // tr.split inserts a close + open token pair at splitPos, shifting everything
-    // at splitPos and beyond by +2.
-    // Head node position is unchanged (it starts before splitPos).
-    // Tail node position = mapping.map(splitPos) = splitPos + 2.
+    // tr.split inserts a close + open token pair at splitPos.
+    // StepMap: oldStart=splitPos, oldEnd=splitPos, newSize=2 (2 tokens inserted).
+    //
+    // After the split:
+    //   splitPos + 0  = close token of head paragraph
+    //   splitPos + 1  = open token of tail paragraph  ← the tail's block position
+    //   splitPos + 2  = first content position inside tail
+    //
+    // mapping.map(splitPos, +1)  = splitPos + 2  (past insertion, default bias)
+    // mapping.map(splitPos, -1)  = splitPos       (before insertion)
+    //
+    // Tail node block position = splitPos + 1 = mapping.map(splitPos, -1) + 1
     this.tr.split(splitPos)
 
     const headNodePos = nodePos
-    const tailNodePos = this.tr.mapping.map(splitPos)
+    const tailNodePos = this.tr.mapping.map(splitPos, -1) + 1
 
     this.tr.setNodeMarkup(headNodePos, null, {
       ...nodeAttrs,

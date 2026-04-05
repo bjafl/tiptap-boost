@@ -200,20 +200,21 @@ export class PageMap {
     let pageIndex = 0
 
     doc.forEach((node, offset) => {
-      const pos = offset // 0-based offset into doc content
-      const nodeStart = pos + 1 // +1 to enter the node
-
-      // Estimate height: use a simple line-count heuristic (cache not yet warm)
+      // `offset` is the block position of this top-level node — the value
+      // nodeDOM() expects and the correct position for page boundaries.
+      // Do NOT use offset + 1 here: that position is inside the node and would
+      // cause the breaker widget to render as a child of the node, inflating
+      // its measured height during the first DOM-based reflow pass.
       const estimatedHeight = estimateNodeHeight(node)
 
       if (!col.tryAddChild(estimatedHeight, 0, 0)) {
-        // Node overflows current page — close this page
+        // Node overflows current page — close this page at offset (node boundary).
         this.pages.push({
           pageIndex,
           startPos: pageStart,
-          endPos: nodeStart,
+          endPos: offset,
         })
-        pageStart = nodeStart
+        pageStart = offset
         pageIndex++
         col.reset(geometry.contentHeight)
         col.tryAddChild(estimatedHeight, 0, 0)

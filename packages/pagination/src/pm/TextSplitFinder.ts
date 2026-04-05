@@ -1,5 +1,6 @@
 import type { EditorView } from '@tiptap/pm/view'
 import type { PaginationOptions } from '../types'
+import { logger } from '../utils/logger'
 
 export interface TextSplitResult {
   /** The DOM Text node where the split occurs. */
@@ -45,23 +46,39 @@ export class TextSplitFinder {
     const lineHeight = parseFloat(style.lineHeight) || 20
     const parRect = paragraphEl.getBoundingClientRect()
 
-    // Orphan check: need room for at least `orphanLines` on this page
-    const availableHeight = maxY - parRect.top
-    if (availableHeight < lineHeight * this.orphanLines) {
+    logger.log('split', `TextSplitFinder.find — parRect: [${parRect.top.toFixed(1)}..${parRect.bottom.toFixed(1)}], maxY: ${maxY.toFixed(1)}, lineHeight: ${lineHeight}px`, paragraphEl)
+
+    // Sanity check: if maxY is at or below the top of the paragraph the
+    // geometry is stale (wrong pageBottom computed from a scrolled-away node).
+    // Fall back to moving the whole block rather than splitting at offset 0.
+    if (maxY <= parRect.top) {
+      logger.log('split', `TextSplitFinder.find — SKIP: maxY (${maxY.toFixed(1)}) ≤ parRect.top (${parRect.top.toFixed(1)}), stale geometry`)
       return null
     }
 
+    // Orphan check: need room for at least `orphanLines` on this page
+    // const availableHeight = maxY - parRect.top
+    // if (availableHeight < lineHeight * this.orphanLines) {
+    //   logger.log('split', `TextSplitFinder.find — SKIP: orphan guard (available ${availableHeight.toFixed(1)}px < ${this.orphanLines} lines × ${lineHeight}px)`)
+    //   return null
+    // }
+
     const result = this.findSplitInElement(paragraphEl, maxY, lineHeight)
-    if (!result) return null
+    if (!result) {
+      logger.log('split', `TextSplitFinder.find — SKIP: no split point found in element`)
+      return null
+    }
+
+    logger.log('split', `TextSplitFinder.find — split point: offset=${result.offset}, wordBoundary=${result.adjustedToWordBoundary}, head=${result.headLines} lines, tail=${result.tailLines} lines`)
 
     // Widow check: ensure tail has at least `widowLines`
-    const totalLines = Math.round(parRect.height / lineHeight)
-    if (result.tailLines < this.widowLines && result.headLines > this.widowLines) {
-      // Try again with maxY reduced by one line to give tail more room
-      const adjustedMaxY = maxY - lineHeight
-      const retried = this.findSplitInElement(paragraphEl, adjustedMaxY, lineHeight)
-      return retried
-    }
+    // const totalLines = Math.round(parRect.height / lineHeight)
+    // if (result.tailLines < this.widowLines && result.headLines > this.widowLines) {
+    //   logger.log('split', `TextSplitFinder.find — SKIP: widow guard (tail ${result.tailLines} < ${this.widowLines} lines)`)
+    //   const adjustedMaxY = maxY - lineHeight
+    //   const retried = this.findSplitInElement(paragraphEl, adjustedMaxY, lineHeight)
+    //   return retried
+    // }
 
     return result
   }
@@ -71,7 +88,12 @@ export class TextSplitFinder {
    * Requires an `EditorView` since it uses `view.posAtDOM`.
    */
   toPmPos(result: TextSplitResult, view: EditorView): number {
-    return view.posAtDOM(result.textNode, result.offset)
+    // offset 0 means "before the first character of this text node" — posAtDOM
+    // can return the paragraph's opening token in that case, which is not a
+    // valid split position (tr.split there creates a zero-content head).
+    // Clamp to 1 so the split always contains at least one character in the head.
+    const safeOffset = Math.max(1, result.offset)
+    return view.posAtDOM(result.textNode, safeOffset)
   }
 
   // ── Private ─────────────────────────────────────────────────────────────────
@@ -115,10 +137,7 @@ export class TextSplitFinder {
     if (!splitTextNode) return null
 
     // Adjust to word boundary
-    const { offset: adjustedOffset, adjusted } = adjustToWordBoundary(
-      splitTextNode,
-      splitOffset
-    )
+    const { offset: adjustedOffset, adjusted } = adjustToWordBoundary(splitTextNode, splitOffset)
 
     // Estimate line counts
     const splitRange = document.createRange()

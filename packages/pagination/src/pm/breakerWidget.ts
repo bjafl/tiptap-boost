@@ -56,18 +56,18 @@ export function createBreakerWidget(
     // 1-based display index of the page that just ended
     const endingPageIndex = pageIndex
     const footer = buildHeaderFooter(
-      CLASS.footer,
+      'footer',
       options.footer,
       endingPageIndex,
       totalPages,
       options.footerHeight,
-      geometry.margins.bottom,
-      geometry.footerMargins.inner,
-      geometry.footerMargins.outer,
-      geometry.footerMargins.outer
+      geometry
     )
     footer.dataset.pageIndex = String(pageIndex - 1)
     container.appendChild(footer)
+    // apply inner margin to container so it collapses with page margin
+    //TODO: correct when spacer? we subtract margin from minheight of footer..
+    container.style.marginTop = `${geometry.footerMargins.inner}px`
   }
 
   // ── Gap ───────────────────────────────────────────────────────────────────
@@ -81,18 +81,17 @@ export function createBreakerWidget(
   if (!isLast) {
     const startingPageIndex = pageIndex + 1
     const header = buildHeaderFooter(
-      CLASS.header,
+      'header',
       options.header,
       startingPageIndex,
       totalPages,
       options.headerHeight,
-      geometry.margins.top,
-      geometry.headerMargins.outer,
-      geometry.headerMargins.inner,
-      geometry.headerMargins.outer
+      geometry
     )
     header.dataset.pageIndex = String(pageIndex)
     container.appendChild(header)
+    // apply inner margin to container so it collapses with page margin
+    container.style.marginBottom = `${geometry.headerMargins.inner}px`
   }
 
   return container
@@ -121,32 +120,39 @@ export function createBreakerWidget(
  * @param marginRight     Page right margin — used to break out of content padding
  */
 function buildHeaderFooter(
-  className: string,
+  type: 'header' | 'footer',
   content: HeaderFooterContent | null,
   pageNumber: number,
   totalPages: number,
   extraHeight: number,
-  pageMargin: number,
-  paddingTop: number,
-  paddingBottom: number,
-  paddingX: number
+  geometry: PageGeometry
 ): HTMLElement {
   const el = document.createElement('div')
+  const className = type === 'header' ? CLASS.header : CLASS.footer
+  const innerMargins =
+    type === 'header' ? geometry.headerMargins.inner : geometry.footerMargins.inner
+  const outerMargins =
+    type === 'header' ? geometry.headerMargins.outer : geometry.footerMargins.outer
   el.className = className
 
   // Vertical padding provides spacing from page edge and content area.
-  el.style.paddingTop = `${paddingTop}px`
-  el.style.paddingBottom = `${paddingBottom}px`
-
+  if (type === 'header') {
+    el.style.paddingTop = `${outerMargins}px`
+    // el.style.marginBottom = `${innerMargins}px`
+  } else {
+    // el.style.marginTop = `${innerMargins}px`
+    el.style.paddingBottom = `${outerMargins}px`
+  }
   // Horizontal padding
-  el.style.paddingLeft = `${paddingX}px`
-  el.style.paddingRight = `${paddingX}px`
+  el.style.paddingLeft = `${outerMargins}px`
+  el.style.paddingRight = `${outerMargins}px`
 
-  // Always reserve at least the page margin height (plus any extra).
-  el.style.minHeight = `${pageMargin + extraHeight}px`
+  // Always reserve at least the page margin height (collapsing inner margins)
+  el.style.minHeight = `${geometry.margins.top - innerMargins}px`
 
   if (extraHeight > 0) {
-    el.style.height = `${pageMargin + extraHeight}px`
+    //TODO: Check..
+    el.style.height = `${geometry.margins.top + geometry.headerMargins.outer}px`
   }
 
   // Three columns — only create if at least one slot has content.

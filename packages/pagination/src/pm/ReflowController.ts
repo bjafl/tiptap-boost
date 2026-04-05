@@ -166,6 +166,9 @@ export class ReflowController {
         continue
       }
 
+      // Fill in the page index — detectOverflow can't know it.
+      overflow.pageIndex = pageIndex
+
       logger.log('overflow', `page ${pageIndex} — overflow at pos ${overflow.nodePos} (${overflow.nodeType}), remaining: ${overflow.remainingHeight.toFixed(1)}px`)
 
       const handled = this.handleOverflow(view, overflow, pageMap, ptx)
@@ -319,14 +322,23 @@ export class ReflowController {
 
       const pageBottom = this.getPageBottomY(view, pageIndex, pageMap)
       const parRect = domEl.getBoundingClientRect()
-      logger.log('split', `paragraph at ${nodePos} — el.top: ${parRect.top.toFixed(1)}, el.bottom: ${parRect.bottom.toFixed(1)}, pageBottom: ${pageBottom.toFixed(1)}, overflow: ${(parRect.bottom - pageBottom).toFixed(1)}px`,
+      const domOverflow = parRect.bottom - pageBottom
+      logger.log('split', `paragraph at ${nodePos} — el.top: ${parRect.top.toFixed(1)}, el.bottom: ${parRect.bottom.toFixed(1)}, pageBottom: ${pageBottom.toFixed(1)}, overflow: ${domOverflow.toFixed(1)}px`,
         domEl
       )
+
+      // DomColumnHeight uses margin-collapsed accounting which can report a
+      // node as overflowing when the actual DOM rect fits. If the element ends
+      // before the page bottom, treat this as a false positive and skip.
+      if (domOverflow <= 0) {
+        logger.log('split', `paragraph at ${nodePos} — DOM rect fits (overflow ${domOverflow.toFixed(1)}px ≤ 0), skipping`)
+        return false
+      }
 
       const splitResult = this.textFinder.find(domEl, pageBottom)
 
       if (!splitResult) {
-        logger.log('split', `paragraph at ${nodePos} — orphan/widow guard triggered, moving whole block`)
+        logger.log('split', `paragraph at ${nodePos} — no split point found, moving whole block`)
         ptx.moveToNextPage(nodePos, pageMap)
         return true
       }
@@ -346,6 +358,13 @@ export class ReflowController {
         logger.log('split', `table at ${nodePos} — no DOM element, moving whole table`)
         ptx.moveToNextPage(nodePos, pageMap)
         return true
+      }
+
+      const tableRect = domEl.getBoundingClientRect()
+      const pageBottom = this.getPageBottomY(view, pageIndex, pageMap)
+      if (tableRect.bottom <= pageBottom) {
+        logger.log('split', `table at ${nodePos} — DOM rect fits (overflow ${(tableRect.bottom - pageBottom).toFixed(1)}px ≤ 0), skipping`)
+        return false
       }
 
       const plan = this.tableFinder.analyze(node, domEl, remainingHeight)
@@ -368,6 +387,14 @@ export class ReflowController {
 
     // ── Default: move entire block to next page ──
     const domEl = view.nodeDOM(nodePos) as HTMLElement | null
+    if (domEl) {
+      const rect = domEl.getBoundingClientRect()
+      const pageBottom = this.getPageBottomY(view, pageIndex, pageMap)
+      if (rect.bottom <= pageBottom) {
+        logger.log('split', `${nodeType} at ${nodePos} — DOM rect fits (overflow ${(rect.bottom - pageBottom).toFixed(1)}px ≤ 0), skipping`)
+        return false
+      }
+    }
     logger.log('split', `${nodeType} at ${nodePos} — moving whole block to next page`, domEl ?? '(no DOM)')
     ptx.moveToNextPage(nodePos, pageMap)
     return true
