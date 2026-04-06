@@ -2,6 +2,7 @@ import type { Attrs, Node as PMNode } from '@tiptap/pm/model'
 import type { Transaction } from '@tiptap/pm/state'
 import type { SplitRegistry } from './SplitRegistry'
 import type { PageMap } from './PageMap'
+import { logger } from '../utils/logger'
 
 export interface SplitResult {
   headPos: number
@@ -97,6 +98,16 @@ export class PaginationTransaction {
 
     const splitId: string = headNode.attrs.splitId
     const joinPos = headPos + headNode.nodeSize
+
+    // Sanity: head and tail must be adjacent (no other content between them).
+    // If not, the registry is out of sync — skip to avoid corrupting the doc.
+    if (joinPos !== tailPos) {
+      logger.log(
+        'split',
+        `fuseNodes: head at ${headPos} (nodeSize ${headNode.nodeSize}) and tail at ${tailPos} are NOT adjacent (joinPos=${joinPos}) — skipping`
+      )
+      return
+    }
 
     this.tr.join(joinPos)
 

@@ -109,7 +109,19 @@ div:has(> .#{$prefix}-active) {
     bottom: 0;
     width: 30px;
     pointer-events: none;
-    @include alternating-gradient(rgb(255, 0, 0), v(height), rgb(0, 255, 0), v(gap));
+    background-image: repeating-linear-gradient(
+      to bottom,
+      rgba(43, 255, 0, 0.63) 0,
+      rgba(43, 255, 0, 0.63) 25mm,
+      rgba(0, 102, 255, 0.64) 25mm,
+      rgba(0, 102, 255, 0.64) 272mm,
+      rgba(43, 255, 0, 0.63) 272mm,
+      rgba(43, 255, 0, 0.63) 297mm,
+      rgba(255, 0, 0, 0.584) 297mm,
+      rgba(255, 0, 0, 0.584) calc(297mm + var(--tb-page-gap) + 2px),
+      rgba(43, 255, 0, 0.63) calc(297mm + var(--tb-page-gap) + 2px)
+    );
+    // @include alternating-gradient(rgb(255, 0, 0), v(height), rgb(0, 255, 0), v(gap));
     z-index: 9999;
   }
 }

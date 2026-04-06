@@ -592,15 +592,21 @@ export class ReflowController {
   private fuseIfNeeded(view: EditorView, pageMap: PageMap, ptx: PaginationTransaction): boolean {
     this.splitRegistry.syncPageIndexes(pageMap)
     const candidates = this.splitRegistry.findFusionCandidates()
+    if (candidates.length === 0) return false
 
-    for (const { head, tail } of candidates) {
-      const headNode = view.state.doc.nodeAt(head.pos)
-      const tailNode = view.state.doc.nodeAt(tail.pos)
-      if (!headNode || !tailNode) continue
-      ptx.fuseNodes(head.pos, tail.pos)
-    }
+    // Fuse only ONE pair per pass, matching the one-split-per-pass constraint.
+    // After tr.join, all subsequent positions are stale — batching multiple fuses
+    // in one transaction causes "Structure replace would overwrite content" crashes.
+    // Remaining candidates are handled in follow-up passes (debounce reset ensures
+    // the next RAF fires immediately).
+    const { head, tail } = candidates[0]
+    const headNode = view.state.doc.nodeAt(head.pos)
+    const tailNode = view.state.doc.nodeAt(tail.pos)
+    if (!headNode || !tailNode) return false
 
-    return candidates.length > 0
+    logger.log('split', `fuseIfNeeded: fusing head@${head.pos} tail@${tail.pos} (splitId ${head.splitId}), ${candidates.length - 1} more candidate(s) pending`)
+    ptx.fuseNodes(head.pos, tail.pos)
+    return true
   }
 
   // ── Height cache ───────────────────────────────────────────────────────────
