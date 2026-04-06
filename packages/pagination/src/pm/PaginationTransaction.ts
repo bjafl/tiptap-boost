@@ -48,8 +48,15 @@ export class PaginationTransaction {
    * @param nodeAttrs Attrs of the original node (preserved on both halves)
    * @param pageIndex Page index the head lands on (for registry initialisation)
    */
-  splitParagraphAt(splitPos: number, nodePos: number, nodeAttrs: Attrs, pageIndex: number = -1): SplitResult {
+  splitParagraphAt(
+    splitPos: number,
+    nodePos: number,
+    nodeAttrs: Attrs,
+    pageIndex: number = -1
+  ): SplitResult {
     const splitId = crypto.randomUUID()
+
+    //TODO: handle pars that have already been split (splitId exists) — either by fusing first or allowing multiple splits per node with splitPart: 'head' | 'mid' | 'tail'
 
     // tr.split inserts a close + open token pair at splitPos.
     // StepMap: oldStart=splitPos, oldEnd=splitPos, newSize=2 (2 tokens inserted).
@@ -81,7 +88,12 @@ export class PaginationTransaction {
     })
 
     this.registry.register({ splitId, splitPart: 'head', pos: headNodePos, pageIndex })
-    this.registry.register({ splitId, splitPart: 'tail', pos: tailNodePos, pageIndex: pageIndex + 1 })
+    this.registry.register({
+      splitId,
+      splitPart: 'tail',
+      pos: tailNodePos,
+      pageIndex: pageIndex + 1,
+    })
 
     return { headPos: headNodePos, tailPos: tailNodePos, splitId }
   }

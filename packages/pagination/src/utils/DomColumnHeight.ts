@@ -20,12 +20,16 @@ import { PageGeometry } from './PageGeometry'
  * ```
  */
 export class DomColumnHeight {
-  private lastBottomMargin: number = 0
+  private lastBottomMargin?: number
   private count: number = 0
-  private _height: number = 0
+  private _heightExclMb: number = 0 // height excluding the last bottom margin (for accurate projection of next element)
   private maxContentHeight: number
   private contextMarginTop: number
   private contextMarginBottom: number
+  private domComputationCache: WeakMap<
+    HTMLElement,
+    { rect?: DOMRect; style?: CSSStyleDeclaration }
+  > = new WeakMap()
 
   /**
    * @param maxContentHeight  Available height in the page body.
@@ -47,12 +51,12 @@ export class DomColumnHeight {
 
   /** Current accumulated height including margins. */
   get height(): number {
-    return this._height
+    return this._heightExclMb + this.collapsedMarginBottom(this.lastBottomMargin ?? 0)
   }
 
   /** Space remaining before overflow. */
   get remaining(): number {
-    return this.maxContentHeight - this._height
+    return this.maxContentHeight - this.height
   }
 
   /** Number of children added so far. */
@@ -65,17 +69,29 @@ export class DomColumnHeight {
     return this.count === 0
   }
 
+  flushCache(): void {
+    this.domComputationCache = new WeakMap()
+  }
+
   /**
    * Reset for reuse on the next page.
    * Optionally update maxContentHeight (e.g. if pages have different sizes).
    */
-  reset(maxContentHeight?: number): void {
-    this.lastBottomMargin = 0
+  reset(maxContentHeight?: number, margins: { top?: number; bottom?: number } = {}): void {
+    this.lastBottomMargin = undefined
     this.count = 0
-    this._height = 0
+    this._heightExclMb = 0
     if (maxContentHeight !== undefined) {
       this.maxContentHeight = maxContentHeight
     }
+    const { top, bottom } = margins
+    if (top !== undefined) {
+      this.contextMarginTop = top
+    }
+    if (bottom !== undefined) {
+      this.contextMarginBottom = bottom
+    }
+    this.flushCache()
   }
 
   /**
@@ -97,11 +113,13 @@ export class DomColumnHeight {
     marginBottom?: number
   ): { fits: boolean; height: number; mt: number; mb: number } {
     const { height, mt, mb } = this.resolveMetrics(elOrHeight, marginTop, marginBottom)
-    const newHeight = this.projectHeight(height, mt, mb)
+    const { newHeight, newHeightExclMb } = this.projectAddingChild(height, mt, mb)
 
-    if (newHeight > this.maxContentHeight) return { fits: false, height, mt, mb }
+    if (newHeight > this.maxContentHeight) {
+      return { fits: false, height, mt, mb }
+    }
 
-    this._height = newHeight
+    this._heightExclMb = newHeightExclMb
     this.lastBottomMargin = mb
     this.count++
     return { fits: true, height, mt, mb }
@@ -119,45 +137,118 @@ export class DomColumnHeight {
     marginBottom?: number
   ): PeekResult {
     const { height, mt, mb } = this.resolveMetrics(elOrHeight, marginTop, marginBottom)
-    const newHeight = this.projectHeight(height, mt, mb)
-
+    const { newHeight, estimatedRemaining, maxHeightForChild } = this.projectAddingChild(
+      height,
+      mt,
+      mb
+    )
     return {
       fits: newHeight <= this.maxContentHeight,
       projectedHeight: newHeight,
       elementHeight: height,
-      remaining: this.maxContentHeight - newHeight,
-      collapsedGap: this.collapsedGap(mt),
+      estimatedRemainingBlockHeight: estimatedRemaining,
+      maxHeightForChild,
+      gapSize: Math.max(mt, mb),
     }
   }
 
   /**
-   * Compute what the accumulated height would be if an element
-   * with the given metrics were added.
+   * Get the maximum bottom DOM coordinate for an element, that would fit in the column.
    */
-  private projectHeight(height: number, marginTop: number, marginBottom: number): number {
-    // Margin bottom collapses with context margin
-    const mb = Math.max(marginBottom, this.contextMarginBottom)
+  findMaxBottomForElement(el: HTMLElement): number {
+    const { rect } = this.getComputed(el)
+    const { maxHeightForChild } = this.peekChild(el)
+    return rect.top + maxHeightForChild
+  }
 
-    if (this.count === 0) {
-      // First child: marginTop collapses with context margin
-      const mt = Math.max(marginTop, this.contextMarginTop)
-      return mt + height + mb
+  /*
+   * Get computed metrics for an element.
+   * Uses a cache to avoid redundant `getBoundingClientRect` and `getComputedStyle` calls
+   * Defaults to compute both rect and style if not cached, but can be configured with opts.
+   */
+  getComputed(el: HTMLElement): { rect: DOMRect; style: CSSStyleDeclaration }
+  getComputed(
+    el: HTMLElement,
+    opts: { rect: true; style?: boolean }
+  ): { rect: DOMRect; style?: CSSStyleDeclaration }
+  getComputed(
+    el: HTMLElement,
+    opts: { rect?: boolean; style: true }
+  ): { rect?: DOMRect; style: CSSStyleDeclaration }
+  getComputed(
+    el: HTMLElement,
+    opts: { rect?: boolean; style?: boolean } = {}
+  ): { rect?: DOMRect; style?: CSSStyleDeclaration } {
+    const { rect: getRect = true, style: getStyle = true } = opts
+    let { rect, style } = this.domComputationCache.get(el) || {}
+    if (getRect && !rect) {
+      rect = el.getBoundingClientRect()
+      this.domComputationCache.set(el, { rect })
     }
-
-    const gap = this.collapsedGap(marginTop)
-    return this._height + gap + height + mb
+    if (getStyle && !style) {
+      style = getComputedStyle(el)
+      this.domComputationCache.set(el, { style })
+    }
+    return { rect, style }
   }
 
   /**
-   * Collapsed margin gap between the last child's bottom margin
-   * and a new child's top margin.
+   * Make a projection for adding an element with the given height and margins, without mutating state.
+   */
+  private projectAddingChild(height: number, marginTop: number, marginBottom: number) {
+    const collapsedMt = this.collapsedMarginTop(marginTop)
+    const collapsedMb = this.collapsedMarginBottom(marginBottom)
+    const newHeightExclMb = this._heightExclMb + height + collapsedMt
+    const newHeight = newHeightExclMb + collapsedMb
+    const maxHeightForChild = this.maxContentHeight - newHeight + height
+    const estimatedRemaining = this.maxContentHeight - newHeightExclMb - collapsedMt - collapsedMb
+    return {
+      collapsedMt,
+      collapsedMb,
+      newHeightExclMb,
+      newHeight,
+      maxHeightForChild,
+      estimatedRemaining,
+    }
+  }
+
+  /**
+   * Collapsed margin top height, if adding  an element with given margin size.
+   * Resulting height is the gap that should be counted towards the column height.
    *
-   * CSS margin collapsing: the larger of the two adjacent margins wins.
-   * Since lastBottomMargin is already accounted for in _height,
-   * we only add the difference (if marginTop is larger).
+   * For first column child, margin collapses against the context margin (e.g. page padding).
+   * Then it may collapse to zero, as the height will not be relevant for column height.
+   * Else it collapses against previous sibling's bottom margin, and the larger one wins.
    */
-  private collapsedGap(marginTop: number): number {
-    return Math.max(marginTop - this.lastBottomMargin, 0)
+  private collapsedMarginTop(marginTop: number): number {
+    if (this.lastBottomMargin === undefined) {
+      return Math.max(marginTop - this.contextMarginTop, 0)
+    }
+    return Math.max(marginTop, this.lastBottomMargin)
+  }
+
+  /**
+   * Collapsed margin bottom height, if adding  an element with given margin size.
+   * Resulting height is the gap that should be counted towards the column height.
+   *
+   * Bottom margin of last child collapses against the context margin (e.g. page padding).
+   * Result may collapse to zero, as the height will not be relevant for column height.
+   */
+  private collapsedMarginBottom(marginBottom: number): number {
+    return Math.max(marginBottom - this.contextMarginBottom, 0)
+  }
+
+  /**
+   * Convenience for total extra gap space counted towards column height,
+   * if adding an element with the given margins.
+   *
+   * Returns sum of collapsed top and bottom margins
+   * calculated with collapseMarginTop and collapsedMarginBottom.
+   */
+  private collapsedMarginsHeight(marginTop: number, marginBottom: number): number {
+    const mt = this.collapsedMarginTop(marginTop)
+    const mb = this.collapsedMarginBottom(marginBottom)
+    return mt + mb
   }
 
   /**
@@ -176,9 +267,7 @@ export class DomColumnHeight {
         mb: marginBottom ?? 0,
       }
     }
-
-    const rect = elOrHeight.getBoundingClientRect()
-    const style = getComputedStyle(elOrHeight)
+    const { rect, style } = this.getComputed(elOrHeight)
 
     return {
       height: rect.height,
@@ -195,8 +284,12 @@ export type PeekResult = {
   projectedHeight: number
   /** The element's own height (from getBoundingClientRect). */
   elementHeight: number
-  /** Space remaining after adding this element (negative if overflow). */
-  remaining: number
-  /** The actual gap that would be added between this and the previous element. */
-  collapsedGap: number
+  /** Block height remaining after adding this element (negative if overflow).
+   *  Assumes block with same margins as peeked element.
+   */
+  estimatedRemainingBlockHeight: number
+  /** Max height for the peeked element that would fit in the column. */
+  maxHeightForChild: number
+  /** Gap that would be added between elements with same margins as peeked element. */
+  gapSize: number
 }

@@ -1,6 +1,7 @@
 import type { EditorView } from '@tiptap/pm/view'
 import type { PaginationOptions } from '../types'
 import { logger } from '../utils/logger'
+import { DomColumnHeight } from '../utils/DomColumnHeight'
 
 export interface TextSplitResult {
   /** The DOM Text node where the split occurs. */
@@ -41,20 +42,27 @@ export class TextSplitFinder {
    * Returns `null` if the paragraph should be moved whole (too little space,
    * orphan control, no suitable text node found).
    */
-  find(paragraphEl: HTMLElement, maxY: number): TextSplitResult | null {
-    const style = getComputedStyle(paragraphEl)
+  find(paragraphEl: HTMLElement, domCol: DomColumnHeight): TextSplitResult | null {
+    const { rect, style } = domCol.getComputed(paragraphEl)
+    const maxBottom = domCol.findMaxBottomForElement(paragraphEl)
+    // const style = getComputedStyle(paragraphEl)
     const lineHeight = parseFloat(style.lineHeight) || 20
-    const parRect = paragraphEl.getBoundingClientRect()
+    // const parRect = paragraphEl.getBoundingClientRect()
 
-    logger.log('split', `TextSplitFinder.find — parRect: [${parRect.top.toFixed(1)}..${parRect.bottom.toFixed(1)}], maxY: ${maxY.toFixed(1)}, lineHeight: ${lineHeight}px`, paragraphEl)
+    logger.log(
+      'split',
+      `TextSplitFinder.find — parRect: [${rect.top.toFixed(1)}..${rect.bottom.toFixed(1)}]` +
+        `, maxBottom: ${maxBottom.toFixed(1)}, lineHeight: ${lineHeight}px`,
+      paragraphEl
+    )
 
     // Sanity check: if maxY is at or below the top of the paragraph the
     // geometry is stale (wrong pageBottom computed from a scrolled-away node).
     // Fall back to moving the whole block rather than splitting at offset 0.
-    if (maxY <= parRect.top) {
-      logger.log('split', `TextSplitFinder.find — SKIP: maxY (${maxY.toFixed(1)}) ≤ parRect.top (${parRect.top.toFixed(1)}), stale geometry`)
-      return null
-    }
+    // if (maxY <= parRect.top) {
+    //   logger.log('split', `TextSplitFinder.find — SKIP: maxY (${maxY.toFixed(1)}) ≤ parRect.top (${parRect.top.toFixed(1)}), stale geometry`)
+    //   return null
+    // }
 
     // Orphan check: need room for at least `orphanLines` on this page
     // const availableHeight = maxY - parRect.top
@@ -63,13 +71,16 @@ export class TextSplitFinder {
     //   return null
     // }
 
-    const result = this.findSplitInElement(paragraphEl, maxY, lineHeight)
+    const result = this.findSplitInElement(paragraphEl, rect, maxBottom, lineHeight)
     if (!result) {
       logger.log('split', `TextSplitFinder.find — SKIP: no split point found in element`)
       return null
     }
 
-    logger.log('split', `TextSplitFinder.find — split point: offset=${result.offset}, wordBoundary=${result.adjustedToWordBoundary}, head=${result.headLines} lines, tail=${result.tailLines} lines`)
+    logger.log(
+      'split',
+      `TextSplitFinder.find — split point: offset=${result.offset}, wordBoundary=${result.adjustedToWordBoundary}, head=${result.headLines} lines, tail=${result.tailLines} lines`
+    )
 
     // Widow check: ensure tail has at least `widowLines`
     // const totalLines = Math.round(parRect.height / lineHeight)
@@ -100,10 +111,10 @@ export class TextSplitFinder {
 
   private findSplitInElement(
     el: HTMLElement,
+    parRect: DOMRect,
     maxY: number,
     lineHeight: number
   ): TextSplitResult | null {
-    const parRect = el.getBoundingClientRect()
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
     const range = document.createRange()
 

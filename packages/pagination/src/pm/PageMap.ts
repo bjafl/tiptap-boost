@@ -87,9 +87,11 @@ export class PageMap {
       `setSplitBoundary: page ${pageIndex} endPos ${page.endPos} → ${newEndPos}`
     )
 
-    page.endPos = newEndPos
     if (next) {
+      page.endPos = newEndPos
       next.startPos = newEndPos
+    } else {
+      this.splitLastPage(newEndPos)
     }
 
     this.markDirty(pageIndex)
@@ -113,7 +115,32 @@ export class PageMap {
       'pagemap',
       `insertPageAfter ${afterIndex}: new page ${newIndex} [${startPos}..${endPos}], total: ${this.pages.length}`
     )
-    this.markDirty(newIndex)
+    this.markDirty(newIndex) //TODO
+  }
+
+  splitLastPage(splitPos: number): void {
+    if (this.pages.length === 0) {
+      this.pages.push({ pageIndex: 0, startPos: 0, endPos: splitPos })
+      return
+    }
+
+    const newIndex = this.pages.length
+    const lastPage = this.pages[newIndex - 1]
+    if (splitPos <= lastPage.startPos || splitPos >= lastPage.endPos) {
+      logger.log(
+        'pagemap',
+        `splitLastPage FAILED: splitPos ${splitPos} is out of bounds of the last page [${lastPage.startPos}..${lastPage.endPos}]`
+      )
+      return
+    }
+    const newPage: PageEntry = {
+      pageIndex: newIndex,
+      startPos: splitPos,
+      endPos: lastPage.endPos,
+    }
+    lastPage.endPos = splitPos
+    this.pages.push(newPage)
+    this.markDirty(newIndex) //TODO
   }
 
   /**

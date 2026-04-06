@@ -18,12 +18,19 @@ export interface ReflowResult {
   pageHeights: Map<number, number> | null
 }
 
-interface OverflowResult {
+interface OverflowResultPhase1 {
   pageIndex: number
   nodePos: number
-  nodeType: string
-  remainingHeight: number
+  // nodeType: string
+  // remainingHeight: number
+  node: PMNode
 }
+interface OverflowResultPhase2 extends OverflowResultPhase1 {
+  domCol: DomColumnHeight
+  domEl: HTMLElement
+}
+
+type SplitResult = 'split' | 'moveBlock' | 'unhandled' // | 'notNeeded' | 'pull' | 'fuse'
 
 /**
  * Orchestrates the two-phase reflow cycle:
@@ -115,7 +122,7 @@ export class ReflowController {
       if (!overflow) continue
 
       // Only handle whole-block moves in Phase 1; sub-paragraph splitting is Phase 2
-      if (overflow.nodeType !== 'paragraph' || !this.config.splitParagraphs) {
+      if (overflow.node.type.name !== 'paragraph' || !this.config.splitParagraphs) {
         ptx.moveToNextPage(overflow.nodePos, pageMap)
         changed = true
       }
@@ -184,17 +191,20 @@ export class ReflowController {
 
       logger.log(
         'overflow',
-        `page ${pageIndex} — overflow at pos ${overflow.nodePos} (${overflow.nodeType}), remaining: ${overflow.remainingHeight.toFixed(1)}px`
+        `page ${pageIndex} — overflow at pos ${overflow.nodePos} (${overflow.node.type}), remaining: ${overflow.domCol.remaining.toFixed(1)}px`
       )
 
-      const handled = this.handleOverflow(view, overflow, pageMap, ptx, docSplitDone)
-      if (handled) {
+      const splitResult = this.handleOverflow(view, overflow, pageMap, ptx, docSplitDone)
+      if (splitResult !== 'unhandled') {
         changed = true
         // If handleOverflow performed a doc split, record it and stop processing
         // further pages — remaining dirty pages will be re-queued by the next RAF.
-        if (!docSplitDone && handled === 'split') {
+        if (!docSplitDone && splitResult === 'split') {
           docSplitDone = true
-          logger.log('reflow', `doc split performed on page ${pageIndex} — stopping pass to avoid stale positions`)
+          logger.log(
+            'reflow',
+            `doc split performed on page ${pageIndex} — stopping pass to avoid stale positions`
+          )
           break
         }
         remaining.push(pageIndex + 1)
@@ -233,7 +243,10 @@ export class ReflowController {
       // splitParagraphAt (via tr.mapping). Leave dirty and reset debounce so the
       // follow-up RAF continues paginating the remaining dirty pages.
       this.lastReflowTime = 0
-      logger.log('reflow', 'doc split done — leaving dirty pages for next RAF pass (debounce reset)')
+      logger.log(
+        'reflow',
+        'doc split done — leaving dirty pages for next RAF pass (debounce reset)'
+      )
     } else {
       // Fuse operations (tr.join) shift positions of all subsequent nodes by -2.
       // Apply the accumulated transaction mapping to bring pageMap in sync with
@@ -246,13 +259,19 @@ export class ReflowController {
         // old DOM. Leave dirty pages and reset debounce so the follow-up pass
         // remeasures against the fused document.
         this.lastReflowTime = 0
-        logger.log('reflow', 'fuse changed doc — leaving dirty pages for remeasurement pass (debounce reset)')
+        logger.log(
+          'reflow',
+          'fuse changed doc — leaving dirty pages for remeasurement pass (debounce reset)'
+        )
       } else {
         pageMap.clearDirty()
       }
     }
 
-    logger.log('reflow', `runReflow done — changed: ${changed}, pages: ${pageMap.length}, dirty: [${pageMap.dirtyPages()}]`)
+    logger.log(
+      'reflow',
+      `runReflow done — changed: ${changed}, pages: ${pageMap.length}, dirty: [${pageMap.dirtyPages()}]`
+    )
     return { correctionTr: changed ? ptx.finalize() : null, pageHeights }
   }
 
@@ -266,9 +285,9 @@ export class ReflowController {
     startPos: number,
     endPos: number,
     heightCache: HeightCache
-  ): OverflowResult | null {
+  ): OverflowResultPhase1 | null {
     const col = DomColumnHeight.fromPageGeometry(this.geometry)
-    let result: OverflowResult | null = null
+    let result: OverflowResultPhase1 | null = null
 
     doc.nodesBetween(startPos, endPos, (node, pos) => {
       if (result) return false
@@ -281,8 +300,9 @@ export class ReflowController {
         result = {
           pageIndex: 0, // caller fills this in
           nodePos: pos,
-          nodeType: node.type.name,
-          remainingHeight: col.remaining,
+          // nodeType: node.type.name,
+          // remainingHeight: col.remaining,
+          node,
         }
       }
       return false // don't descend into block children
@@ -298,10 +318,10 @@ export class ReflowController {
     view: EditorView,
     startPos: number,
     endPos: number
-  ): OverflowResult | null {
+  ): OverflowResultPhase2 | null {
     const { doc } = view.state
     const col = DomColumnHeight.fromPageGeometry(this.geometry)
-    let result: OverflowResult | null = null
+    let result: OverflowResultPhase2 | null = null
 
     const isVerbose = logger.isEnabled('overflow')
     const nodeRows: Array<{
@@ -341,8 +361,9 @@ export class ReflowController {
         result = {
           pageIndex: 0,
           nodePos: pos,
-          nodeType: node.type.name,
-          remainingHeight: col.remaining,
+          node,
+          domEl,
+          domCol: col,
         }
       }
       return false
@@ -374,154 +395,161 @@ export class ReflowController {
   /** Returns `'split'` when a doc split was performed, `true` for a page-map-only move, `false` for no-op. */
   private handleOverflow(
     view: EditorView,
-    overflow: OverflowResult,
+    overflow: OverflowResultPhase2,
     pageMap: PageMap,
     ptx: PaginationTransaction,
     _docSplitDone: boolean = false
-  ): boolean | 'split' {
-    const { nodePos, nodeType, remainingHeight, pageIndex } = overflow
-    const node = view.state.doc.nodeAt(nodePos)
-    if (!node) return false
+  ): SplitResult {
+    const { nodePos, node, domCol, domEl, pageIndex } = overflow
+    const nodeType = node.type.name
+    // const node = view.state.doc.nodeAt(nodePos)
+    if (!node) return 'unhandled'
+    // if (!domEl) {
+    //   //TODO - check if OverflowResult may have domEl null or if this is redundant
+    //   logger.log('split', `block at ${nodePos} — no DOM element, moving whole block`)
+    //   ptx.moveToNextPage(nodePos, pageMap)
+    //   return 'moveBlock'
+    // }
+    // TODO - check needed? This function should not be called without a valid
+    // overflow result which means we already have determined that el bottom exceeds pageBottom
+    // const { rect } = domCol.getComputed(domEl, { rect: true, style: false })
+    // const pageBottom = domCol.findMaxBottomForElement(domEl)
+    // if (rect.bottom <= pageBottom) {
+    //   logger.log(
+    //     'split',
+    //     `${nodeType} at ${nodePos} — DOM rect fits (overflow ${(rect.bottom - pageBottom).toFixed(1)}px ≤ 0), skipping`
+    //   )
+    //   return 'notNeeded'
+    // }
 
-    // ── Paragraph: attempt sub-paragraph split ──
     if (nodeType === 'paragraph' && this.config.splitParagraphs) {
-      const domEl = view.nodeDOM(nodePos) as HTMLElement | null
-      if (!domEl) {
-        logger.log('split', `paragraph at ${nodePos} — no DOM element, moving whole block`)
-        ptx.moveToNextPage(nodePos, pageMap)
-        return true
-      }
-
-      const parRect = domEl.getBoundingClientRect()
-
-      // Compute pageBottom from the overflowing node's DOM position and the
-      // remaining column space when overflow was detected.
-      // remainingHeight = contentHeight - accumulatedHeightBeforeThisNode
-      // → pageBottom = parRect.top + remainingHeight
-      // This is robust regardless of whether the page's first node is in the
-      // DOM (avoids getPageBottomY returning Infinity for new/off-screen pages).
-      const pageBottom = parRect.top + remainingHeight
-
-      const parMb = parseFloat(getComputedStyle(domEl).marginBottom) || 0
-      const mb = Math.max(parMb, this.geometry.footerMargins.inner)
-      const parBottom = parRect.bottom + mb
-
-      const domOverflow = parBottom - pageBottom
-      logger.log(
-        'split',
-        `paragraph at ${nodePos} — el.top: ${parRect.top.toFixed(1)}, el.bottom: ${parBottom.toFixed(1)}, pageBottom: ${pageBottom.toFixed(1)} (remaining ${remainingHeight.toFixed(1)}px), overflow: ${domOverflow.toFixed(1)}px`,
-        domEl
-      )
-
-      // DomColumnHeight uses margin-collapsed accounting which can report a
-      // node as overflowing when the actual DOM rect fits. If the element ends
-      // before the page bottom, treat this as a false positive and skip.
-      if (domOverflow <= 0) {
-        logger.log(
-          'split',
-          `paragraph at ${nodePos} — DOM rect fits (overflow ${domOverflow.toFixed(1)}px ≤ 0), skipping`
-        )
-        return false
-      }
-
-      const splitResult = this.textFinder.find(domEl, pageBottom)
-
-      if (!splitResult) {
-        logger.log('split', `paragraph at ${nodePos} — no split point found, moving whole block`)
-        ptx.moveToNextPage(nodePos, pageMap)
-        return true
-      }
-
-      logger.log(
-        'split',
-        `paragraph at ${nodePos} — splitting at char offset ${splitResult.offset} (head: ${splitResult.headLines} lines, tail: ${splitResult.tailLines} lines, wordBoundary: ${splitResult.adjustedToWordBoundary})`,
-        domEl
-      )
-      const pmPos = this.textFinder.toPmPos(splitResult, view)
-      const { tailPos } = ptx.splitParagraphAt(pmPos, nodePos, node.attrs, pageIndex)
-
-      // Update the PageMap boundary so head stays on pageIndex and tail moves to
-      // pageIndex + 1. Without this fuseIfNeeded sees both on the same page and
-      // immediately fuses them → infinite loop.
-      const currentPage = pageMap.getPage(pageIndex)
-      if (pageMap.getPage(pageIndex + 1)) {
-        pageMap.setSplitBoundary(pageIndex, tailPos)
-      } else {
-        // Splitting the last page: capture current endPos before overwriting it,
-        // then create a new page for the tail content.
-        const oldEnd = currentPage ? currentPage.endPos : tailPos
-        pageMap.setSplitBoundary(pageIndex, tailPos)
-        pageMap.insertPageAfter(pageIndex, tailPos, oldEnd)
-      }
-
-      logger.log(
-        'pagemap',
-        `split boundary set: page ${pageIndex} endPos → ${tailPos}, tail on page ${pageIndex + 1}`
-      )
-      return 'split'
+      return this.splitParagraph(view, overflow, pageMap, ptx)
     }
-
-    // ── Table: attempt row-level split ──
     if (nodeType === 'table' && this.config.splitTables) {
-      const domEl = view.nodeDOM(nodePos) as HTMLElement | null
-      if (!domEl) {
-        logger.log('split', `table at ${nodePos} — no DOM element, moving whole table`)
-        ptx.moveToNextPage(nodePos, pageMap)
-        return true
-      }
-
-      const tableRect = domEl.getBoundingClientRect()
-      const pageBottom = tableRect.top + remainingHeight
-      if (tableRect.bottom <= pageBottom) {
-        logger.log(
-          'split',
-          `table at ${nodePos} — DOM rect fits (overflow ${(tableRect.bottom - pageBottom).toFixed(1)}px ≤ 0), skipping`
-        )
-        return false
-      }
-
-      const plan = this.tableFinder.analyze(node, domEl, remainingHeight)
-      if (!plan || plan.splitBeforeRow === null) {
-        logger.log(
-          'split',
-          `table at ${nodePos} — no safe split row (${plan ? 'rowspan conflict' : 'fits'}), moving whole table`,
-          domEl
-        )
-        ptx.moveToNextPage(nodePos, pageMap)
-        return true
-      }
-
-      // TODO: implement actual table row split transaction
-      logger.log(
-        'split',
-        `table at ${nodePos} — safe split before row ${plan.splitBeforeRow} (of ${plan.rowHeights.length} rows), table splitting not yet implemented — moving whole table`,
-        { rowHeights: plan.rowHeights, unsafeRows: [...plan.unsafeRows] },
-        domEl
-      )
-      ptx.moveToNextPage(nodePos, pageMap)
-      return true
+      return this.splitTable(view, overflow, pageMap, ptx)
     }
 
     // ── Default: move entire block to next page ──
-    const domEl = view.nodeDOM(nodePos) as HTMLElement | null
-    if (domEl) {
-      const rect = domEl.getBoundingClientRect()
-      const pageBottom = rect.top + remainingHeight
-      if (rect.bottom <= pageBottom) {
-        logger.log(
-          'split',
-          `${nodeType} at ${nodePos} — DOM rect fits (overflow ${(rect.bottom - pageBottom).toFixed(1)}px ≤ 0), skipping`
-        )
-        return false
-      }
+    // const domEl = view.nodeDOM(nodePos) as HTMLElement | null
+
+    ptx.moveToNextPage(nodePos, pageMap)
+    return 'moveBlock'
+  }
+
+  private splitParagraph(
+    view: EditorView,
+    overflow: OverflowResultPhase2,
+    pageMap: PageMap,
+    ptx: PaginationTransaction
+  ): SplitResult {
+    const { nodePos, node, domCol, domEl, pageIndex } = overflow
+    if (!domEl) {
+      logger.log('split', `paragraph at ${nodePos} — no DOM element, moving whole block`)
+      ptx.moveToNextPage(nodePos, pageMap)
+      return 'moveBlock'
     }
+
+    // const parRect = domEl.getBoundingClientRect()
+
+    // // Compute pageBottom from the overflowing node's DOM position and the
+    // // remaining column space when overflow was detected.
+    // // remainingHeight = contentHeight - accumulatedHeightBeforeThisNode
+    // // → pageBottom = parRect.top + remainingHeight
+    // // This is robust regardless of whether the page's first node is in the
+    // // DOM (avoids getPageBottomY returning Infinity for new/off-screen pages).
+    // const pageBottom = parRect.top + remainingHeight
+
+    // const parMb = parseFloat(getComputedStyle(domEl).marginBottom) || 0
+    // const mb = Math.max(parMb, this.geometry.footerMargins.inner)
+    // const parBottom = parRect.bottom + mb
+
+    // const domOverflow = parBottom - pageBottom
+    // logger.log(
+    //   'split',
+    //   `paragraph at ${nodePos} — el.top: ${parRect.top.toFixed(1)}, el.bottom: ${parBottom.toFixed(1)}, pageBottom: ${pageBottom.toFixed(1)} (remaining ${remainingHeight.toFixed(1)}px), overflow: ${domOverflow.toFixed(1)}px`,
+    //   domEl
+    // )
+
+    // // DomColumnHeight uses margin-collapsed accounting which can report a
+    // // node as overflowing when the actual DOM rect fits. If the element ends
+    // // before the page bottom, treat this as a false positive and skip.
+    // if (domOverflow <= 0) {
+    //   logger.log(
+    //     'split',
+    //     `paragraph at ${nodePos} — DOM rect fits (overflow ${domOverflow.toFixed(1)}px ≤ 0), skipping`
+    //   )
+    //   return 'notNeeded'
+    // }
+
+    const splitResult = this.textFinder.find(domEl, domCol)
+
+    if (!splitResult) {
+      logger.log('split', `paragraph at ${nodePos} — no split point found, moving whole block`)
+      ptx.moveToNextPage(nodePos, pageMap)
+      return 'moveBlock'
+    }
+
     logger.log(
       'split',
-      `${nodeType} at ${nodePos} — moving whole block to next page`,
-      domEl ?? '(no DOM)'
+      `paragraph at ${nodePos} — splitting at char offset ${splitResult.offset} (head: ${splitResult.headLines} lines, tail: ${splitResult.tailLines} lines, wordBoundary: ${splitResult.adjustedToWordBoundary})`,
+      domEl
+    )
+    const pmPos = this.textFinder.toPmPos(splitResult, view)
+    const { tailPos } = ptx.splitParagraphAt(pmPos, nodePos, node.attrs, pageIndex)
+
+    // Update the PageMap boundary so head of split stays on pageIndex and tail moves to
+    // pageIndex + 1. Without this fuseIfNeeded sees both on the same page and
+    // immediately fuses them → infinite loop.
+    const currentPage = pageMap.getPage(pageIndex)
+    pageMap.setSplitBoundary(pageIndex, tailPos)
+
+    logger.log(
+      'pagemap',
+      `split boundary set: page ${pageIndex} endPos → ${tailPos}, tail on page ${pageIndex + 1}`
+    )
+    return 'split'
+  }
+
+  private splitTable(
+    view: EditorView,
+    overflow: OverflowResultPhase2,
+    pageMap: PageMap,
+    ptx: PaginationTransaction
+  ): SplitResult {
+    const { nodePos, node, domCol, domEl, pageIndex } = overflow
+
+    // const tableRect = domEl.getBoundingClientRect()
+    // const pageBottom = tableRect.top + remainingHeight
+    // if (tableRect.bottom <= pageBottom) {
+    //   logger.log(
+    //     'split',
+    //     `table at ${nodePos} — DOM rect fits (overflow ${(tableRect.bottom - pageBottom).toFixed(1)}px ≤ 0), skipping`
+    //   )
+    //   return false
+    // }
+
+    //TODO: Check and improve table splitting logic!
+    const { estimatedRemainingBlockHeight } = domCol.peekChild(domEl)
+    const plan = this.tableFinder.analyze(node, domEl, estimatedRemainingBlockHeight)
+    if (!plan || plan.splitBeforeRow === null) {
+      logger.log(
+        'split',
+        `table at ${nodePos} — no safe split row (${plan ? 'rowspan conflict' : 'fits'}), moving whole table`,
+        domEl
+      )
+      ptx.moveToNextPage(nodePos, pageMap)
+      return 'moveBlock'
+    }
+
+    // TODO: implement actual table row split transaction
+    logger.log(
+      'split',
+      `table at ${nodePos} — safe split before row ${plan.splitBeforeRow} (of ${plan.rowHeights.length} rows), table splitting not yet implemented — moving whole table`,
+      { rowHeights: plan.rowHeights, unsafeRows: [...plan.unsafeRows] },
+      domEl
     )
     ptx.moveToNextPage(nodePos, pageMap)
-    return true
+    return 'moveBlock'
   }
 
   // ── Pull correction ────────────────────────────────────────────────────────
@@ -604,7 +632,10 @@ export class ReflowController {
     const tailNode = view.state.doc.nodeAt(tail.pos)
     if (!headNode || !tailNode) return false
 
-    logger.log('split', `fuseIfNeeded: fusing head@${head.pos} tail@${tail.pos} (splitId ${head.splitId}), ${candidates.length - 1} more candidate(s) pending`)
+    logger.log(
+      'split',
+      `fuseIfNeeded: fusing head@${head.pos} tail@${tail.pos} (splitId ${head.splitId}), ${candidates.length - 1} more candidate(s) pending`
+    )
     ptx.fuseNodes(head.pos, tail.pos)
     return true
   }
@@ -700,7 +731,6 @@ export class ReflowController {
   }
 
   // ── Geometry helpers ───────────────────────────────────────────────────────
-
 }
 
 // ── Cache key ─────────────────────────────────────────────────────────────────
