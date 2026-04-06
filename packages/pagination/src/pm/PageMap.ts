@@ -141,6 +141,11 @@ export class PageMap {
     lastPage.endPos = splitPos
     this.pages.push(newPage)
     this.markDirty(newIndex) //TODO
+
+    logger.log(
+      'pagemap',
+      `splitLastPage: split page ${newIndex - 1} at ${splitPos}, new page ${newIndex} [${newPage.startPos}..${newPage.endPos}]`
+    )
   }
 
   /**
@@ -186,45 +191,66 @@ export class PageMap {
    * Must be called AFTER `applyMapping`.
    */
   snapBoundaries(doc: PMNode): boolean {
+    if (this.pages.length === 0) return false
+
     let snapped = false
-
-    for (let i = 0; i < this.pages.length - 1; i++) {
+    // if (this.pages[0].startPos !== 0) {
+    //   logger.log('pagemap', `snapBoundaries: first page startPos ${this.pages[0].startPos} → 0`)
+    //   this.pages[0].startPos = 0
+    //   this.markDirty(0)
+    //   snapped = true
+    // }
+    let prevBoundaryPos = 0
+    for (let i = 0; i < this.pages.length; i++) {
       const page = this.pages[i]
-      const next = this.pages[i + 1]
+      // const next = this.pages[i + 1]
 
-      // Find which top-level node (if any) contains this boundary position.
-      // Top-level nodes are direct children of doc, so offset into doc content
-      // maps directly to child index via doc.childBefore / doc.resolve.
       const boundaryPos = page.endPos
-      if (boundaryPos <= 0 || boundaryPos >= doc.content.size) continue
-
       const $pos = doc.resolve(boundaryPos)
-
-      // If we're not at a top-level node boundary, snap forward.
-      // A position is a valid page boundary when either:
-      //   - depth === 0 (between top-level nodes, i.e. truly at the doc level), OR
-      //   - depth === 1 AND parentOffset === 0 (exactly at the opening token of a
-      //     top-level node — this happens when moveToNextPage sets the boundary at
-      //     `nodeOffset` which is the node's opening token position).
-      // Any other depth-1+ position (parentOffset > 0) is inside a node and must
-      // be snapped to the node's end so the boundary lies between nodes.
       const isMidNode = $pos.depth > 0 && !($pos.depth === 1 && $pos.parentOffset === 0)
-      if (isMidNode) {
-        // Walk up to depth 1 (direct child of doc) and take the node's end.
-        const nodeEnd = $pos.end(1) + 1 // +1 to pass the closing token
-
-        if (nodeEnd !== boundaryPos) {
+      if (boundaryPos < 0 || boundaryPos > doc.content.size) {
+        logger.log(
+          'pagemap',
+          `snapBoundaries: page ${i} endPos ${boundaryPos} is invalid. Setting to doc end ${doc.content.size}.`
+        )
+        page.endPos = doc.content.size
+        this.markDirty(i)
+        snapped = true
+      }
+      if (page.startPos !== prevBoundaryPos) {
+        logger.log(
+          'pagemap',
+          `snapBoundaries: page ${i} startPos ${page.startPos} → ${prevBoundaryPos} (snapped to previous page end)`
+        )
+        page.startPos = prevBoundaryPos
+        this.markDirty(i)
+        snapped = true
+      } else if (isMidNode) {
+        const nextNode = $pos.after(1)
+        if (nextNode !== boundaryPos) {
           logger.log(
             'pagemap',
-            `snapBoundaries: page ${i} endPos ${boundaryPos} → ${nodeEnd} (mid-node, snapped to node end)`
+            `snapBoundaries: page ${i} endPos ${boundaryPos} → ${nextNode} (mid-node, snapped to node end)`
           )
-          page.endPos = nodeEnd
-          next.startPos = nodeEnd
+          page.endPos = nextNode
           this.markDirty(i)
-          this.markDirty(i + 1)
           snapped = true
         }
       }
+      prevBoundaryPos = boundaryPos
+    }
+
+    // Check last page endPos against doc size
+    // Should never trigger, because it should have been handled above..
+    const lastPage = this.pages[this.pages.length - 1]
+    if (lastPage.endPos !== doc.content.size) {
+      logger.log(
+        'pagemap',
+        `snapBoundaries: last page endPos ${lastPage.endPos} → ${doc.content.size} (snapped to doc end)`
+      )
+      lastPage.endPos = doc.content.size
+      this.markDirty(this.pages.length - 1)
+      snapped = true
     }
 
     return snapped

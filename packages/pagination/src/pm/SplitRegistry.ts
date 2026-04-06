@@ -35,7 +35,11 @@ export class SplitRegistry {
     this.entries.set(entry.splitId, parts)
   }
 
-  unregister(splitId: string, pos: number): void {
+  unregister(splitId: string, pos?: number): void {
+    if (pos === undefined) {
+      this.entries.delete(splitId)
+      return
+    }
     const parts = this.entries.get(splitId)
     if (!parts) return
 
@@ -54,14 +58,14 @@ export class SplitRegistry {
   // ── Fusion candidates ──────────────────────────────────────────────────────
 
   /**
-   * Find all adjacent head→tail (or head→mid) pairs that landed on the same
+   * Find all adjacent head→tail (or mid to any) pairs that landed on the same
    * page — these should be fused.
    *
    * Returns pairs sorted by ascending position so they can be fused from
    * bottom to top (to avoid position invalidation).
    */
-  findFusionCandidates(): Array<{ head: SplitEntry; tail: SplitEntry }> {
-    const candidates: Array<{ head: SplitEntry; tail: SplitEntry }> = []
+  findFusionCandidates(): Array<{ leading: SplitEntry; trailing: SplitEntry }> {
+    const candidates: Array<{ leading: SplitEntry; trailing: SplitEntry }> = []
 
     for (const [, parts] of this.entries) {
       // Sort by position so head always comes before tail
@@ -71,18 +75,18 @@ export class SplitRegistry {
         const current = sorted[i]
         const next = sorted[i + 1]
 
-        const isHead = current.splitPart === 'head' || current.splitPart === 'mid'
-        const isTail = next.splitPart === 'tail' || next.splitPart === 'mid'
+        const curIsHeadMid = current.splitPart === 'head' || current.splitPart === 'mid'
+        const nextIsTailMid = next.splitPart === 'tail' || next.splitPart === 'mid'
         const samePage = current.pageIndex === next.pageIndex
 
-        if (isHead && isTail && samePage) {
-          candidates.push({ head: current, tail: next })
+        if (curIsHeadMid && nextIsTailMid && samePage) {
+          candidates.push({ leading: current, trailing: next })
         }
       }
     }
 
     // Sort descending by position so the caller can fuse from bottom to top
-    return candidates.sort((a, b) => b.head.pos - a.head.pos)
+    return candidates.sort((a, b) => b.leading.pos - a.leading.pos)
   }
 
   // ── Position sync ──────────────────────────────────────────────────────────

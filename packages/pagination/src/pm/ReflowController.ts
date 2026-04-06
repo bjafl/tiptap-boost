@@ -627,16 +627,22 @@ export class ReflowController {
     // in one transaction causes "Structure replace would overwrite content" crashes.
     // Remaining candidates are handled in follow-up passes (debounce reset ensures
     // the next RAF fires immediately).
-    const { head, tail } = candidates[0]
-    const headNode = view.state.doc.nodeAt(head.pos)
-    const tailNode = view.state.doc.nodeAt(tail.pos)
-    if (!headNode || !tailNode) return false
+    const { leading, trailing } = candidates[0]
+    const headNode = view.state.doc.nodeAt(leading.pos)
+    const tailNode = view.state.doc.nodeAt(trailing.pos)
+    if (!headNode || !tailNode) {
+      logger.log(
+        'split',
+        `fuse candidate at ${leading.pos} and ${trailing.pos} — invalid node position(s), skipping`
+      )
+      return false
+    }
 
     logger.log(
       'split',
-      `fuseIfNeeded: fusing head@${head.pos} tail@${tail.pos} (splitId ${head.splitId}), ${candidates.length - 1} more candidate(s) pending`
+      `fuseIfNeeded: fusing a@${leading.pos} b@${trailing.pos} (splitId ${leading.splitId}), ${candidates.length - 1} more candidate(s) pending`
     )
-    ptx.fuseNodes(head.pos, tail.pos)
+    ptx.fuseNodes(leading.pos, trailing.pos, leading.pageIndex)
     return true
   }
 

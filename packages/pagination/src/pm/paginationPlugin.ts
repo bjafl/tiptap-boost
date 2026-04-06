@@ -53,7 +53,19 @@ export function getPaginationPlugin(
         }
       },
 
-      apply: (tr, prev, _oldState, newState) => {
+      apply: (tr, prev, oldState, newState) => {
+        logger.log('plugin', 'apply transaction', {
+          meta: tr.getMeta(META.init)
+            ? 'INIT_META'
+            : tr.getMeta(META.pages)
+              ? 'PAGES_META'
+              : 'none',
+          docChanged: tr.docChanged,
+          steps: tr.steps.length,
+          docSize: newState.doc.content.size,
+          oldDocSize: oldState.doc.content.size,
+        })
+
         // ── INIT_META: fonts are ready, trigger first reflow ──
         if (tr.getMeta(META.init)) {
           const pageMap = new PageMap()
@@ -76,6 +88,11 @@ export function getPaginationPlugin(
         // ── PAGES_META: view.update dispatched a corrected page map ──
         const newPageMap: PageMap | undefined = tr.getMeta(META.pages)
         if (newPageMap !== undefined) {
+          if (oldState.doc.content.size !== newState.doc.content.size) {
+            const result = newPageMap.snapBoundaries(newState.doc)
+            logger.log('plugin', 'PAGES_META — doc size changed, ran snapBoundaries', { result })
+          }
+
           splitRegistry.syncPageIndexes(newPageMap)
           const heightsCorrection = tr.getMeta(META.correction) as Map<number, number> | undefined
           logger.log('plugin', 'PAGES_META — applying corrected PageMap', {
@@ -191,7 +208,10 @@ export function getPaginationPlugin(
               const tr = correctionTr ?? view.state.tr
               tr.setMeta(META.pages, state.pageMap)
               tr.setMeta(META.correction, pageHeights)
-              logger.log('reflow', correctionTr ? 'dispatching correction + heights' : 'dispatching heights only')
+              logger.log(
+                'reflow',
+                correctionTr ? 'dispatching correction + heights' : 'dispatching heights only'
+              )
               view.dispatch(tr)
             } else {
               logger.log('reflow', 'debounced — no dispatch')
@@ -214,15 +234,129 @@ export function getPaginationPlugin(
       const pluginState = paginationPluginKey.getState(newState)
       if (!pluginState?.initialized) return null
 
-      const docChanged = trs.some((tr) => tr.docChanged)
-      if (!docChanged) return null
+      // Only process user-initiated transactions (not our own pagination corrections).
+      // Our transactions always set addToHistory: false via ptx.finalize().
+      const userTrs = trs.filter((tr) => tr.docChanged && tr.getMeta('addToHistory') !== false)
+      if (userTrs.length === 0) return null
 
-      // Build a temporary view-like object — appendTransaction has no view,
-      // so Phase 1 uses cache-based estimation only (no DOM calls).
-      // ReflowController.onAppendTransaction is a no-op without a real EditorView.
-      // Instead we just ensure PageMap is marked dirty — Phase 2 (view.update)
-      // handles the actual DOM-based work.
-      return null
+      // ── User split cleanup ─────────────────────────────────────────────────
+      //
+      // When the user presses Enter inside a split fragment, ProseMirror creates
+      // two nodes that both inherit the original splitId + splitPart attrs.
+      // We detect these duplicates and clear attrs from the correct fragment:
+      //
+      //   User split of 'head': top fragment loses connection to tail → clear top,
+      //                         keep attrs on bottom (it still precedes the tail).
+      //   User split of 'tail': top fragment still follows the head → keep top,
+      //                         clear attrs from bottom (it's a new separate para).
+      //   User split of 'mid':  top stays 'mid', bottom stays 'mid'.
+      //
+      const fixupTr = fixupSplitAttrs(newState, pluginState.splitRegistry)
+      return fixupTr
     },
   })
+}
+
+// ── User split attr cleanup ────────────────────────────────────────────────────
+
+/**
+ * Detects and corrects split-attr inconsistencies caused by user edits:
+ *
+ * USER SPLIT (Enter inside a split fragment):
+ *   Both resulting nodes inherit the same splitId + splitPart.
+ *   'head' split: top loses connection to tail → clear top, keep bottom.
+ *   'tail' split: top still follows the head → keep top, clear bottom.
+ *   'mid'  split: both remain 'mid' — no change needed.
+ *
+ * USER JOIN (Backspace between two paragraphs where one has split attrs):
+ *   The surviving node ends up with attrs from whichever half PM kept (usually
+ *   the top). We check each registered splitId: if only one fragment remains
+ *   in the doc but the chain originally had more, the lonely fragment's attrs
+ *   must be cleared (the logical split no longer exists).
+ *   Specifically — if a splitId has a 'head' in the doc but no 'tail', or a
+ *   'tail' but no 'head', clear the surviving fragment's attrs.
+ *
+ * Returns a correction transaction, or null if no fixup was needed.
+ */
+function fixupSplitAttrs(
+  editorState: import('@tiptap/pm/state').EditorState,
+  _registry: SplitRegistry
+): import('@tiptap/pm/state').Transaction | null {
+  const { doc } = editorState
+  let tr: import('@tiptap/pm/state').Transaction | null = null
+
+  // Collect splitId → { part → positions[] }
+  const byId = new Map<string, Map<string, number[]>>()
+
+  doc.descendants((node, pos) => {
+    const { splitId, splitPart } = node.attrs as {
+      splitId?: string | null
+      splitPart?: string | null
+    }
+    if (!splitId || !splitPart) return
+    const partMap = byId.get(splitId) ?? new Map<string, number[]>()
+    const positions = partMap.get(splitPart) ?? []
+    positions.push(pos)
+    partMap.set(splitPart, positions)
+    byId.set(splitId, partMap)
+  })
+
+  for (const [splitId, partMap] of byId) {
+    const headPositions = partMap.get('head') ?? []
+    const tailPositions = partMap.get('tail') ?? []
+    const midPositions = partMap.get('mid') ?? []
+
+    // ── Duplicate splitPart: user split a fragment ──────────────────────────
+    for (const [splitPart, positions] of partMap) {
+      if (positions.length < 2) continue
+      positions.sort((a, b) => a - b)
+      const clearPos = splitPart === 'head' ? positions[0] : positions[positions.length - 1]
+      const clearNode = doc.nodeAt(clearPos)
+      if (!clearNode) continue
+      logger.log(
+        'split',
+        `fixupSplitAttrs: duplicate ${splitPart} for ${splitId} at [${positions}] — clearing ${clearPos}`
+      )
+      if (!tr) tr = editorState.tr
+      tr.setNodeMarkup(clearPos, null, { ...clearNode.attrs, splitId: null, splitPart: null })
+    }
+
+    // ── Incomplete chain: user joined across a split boundary ───────────────
+    // A valid split chain needs at least a head and a tail (mids are optional).
+    // If head exists without tail (or vice versa), the chain is broken — clear
+    // all surviving fragments of this splitId.
+    const hasHead = headPositions.length > 0
+    const hasTail = tailPositions.length > 0
+    const hasMid = midPositions.length > 0
+
+    if (hasHead !== hasTail) {
+      // Chain is broken — clear all survivors
+      const allPositions = [...headPositions, ...tailPositions, ...midPositions]
+      logger.log(
+        'split',
+        `fixupSplitAttrs: broken chain for ${splitId} (head=${hasHead} mid=${hasMid} tail=${hasTail}) — clearing ${allPositions}`
+      )
+      for (const pos of allPositions) {
+        const node = doc.nodeAt(pos)
+        if (!node) continue
+        if (!tr) tr = editorState.tr
+        tr.setNodeMarkup(pos, null, { ...node.attrs, splitId: null, splitPart: null })
+      }
+    } else if (!hasHead && !hasTail && hasMid) {
+      // Only mid fragments remain — also broken
+      logger.log(
+        'split',
+        `fixupSplitAttrs: orphaned mid(s) for ${splitId} — clearing ${midPositions}`
+      )
+      for (const pos of midPositions) {
+        const node = doc.nodeAt(pos)
+        if (!node) continue
+        if (!tr) tr = editorState.tr
+        tr.setNodeMarkup(pos, null, { ...node.attrs, splitId: null, splitPart: null })
+      }
+    }
+  }
+
+  if (tr) tr.setMeta('addToHistory', false)
+  return tr
 }
